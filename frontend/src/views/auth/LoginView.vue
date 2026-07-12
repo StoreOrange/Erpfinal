@@ -93,12 +93,18 @@
         <p>Ingresa tus credenciales para continuar con la gestion del negocio.</p>
       </div>
 
-      <form class="auth-form" @submit.prevent="login">
+      <form class="auth-form" autocomplete="off" @submit.prevent="login">
         <label class="field-group">
           <span>Usuario o correo</span>
           <IconField class="auth-input-shell">
             <InputIcon class="bi bi-person" />
-            <InputText v-model="email" class="form-control" placeholder="Ingresa tu usuario" autocomplete="username" />
+            <InputText
+              v-model="email"
+              class="form-control"
+              name="erp_login_user"
+              placeholder="Ingresa tu usuario"
+              autocomplete="off"
+            />
           </IconField>
         </label>
 
@@ -109,10 +115,12 @@
             <Password
               v-model="password"
               class="form-control"
+              input-id="erp-login-password"
+              input-name="erp_login_access_key"
               placeholder="Ingresa tu contrasena"
               :feedback="false"
               toggle-mask
-              autocomplete="current-password"
+              autocomplete="new-password"
             />
           </IconField>
         </label>
