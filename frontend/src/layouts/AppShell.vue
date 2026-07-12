@@ -148,6 +148,10 @@ const breadcrumbItems = computed(() => {
       ? "Datos"
       : route.path.includes("/sales")
         ? "Ventas y Facturacion"
+        : route.path.includes("/reports")
+          ? "Informes"
+          : route.path.includes("/procurement")
+            ? "Compras"
         : route.path.includes("/users")
           ? "Seguridad"
           : "Aplicaciones";
@@ -170,6 +174,7 @@ const panelNavigation = computed(() => [
       { label: "Ventas y Facturacion", icon: "bi bi-cart-check", command: () => goTo("/app/sales") },
       { label: "Vales de Caja", icon: "bi bi-receipt", command: () => goTo("/app/sales/cash-vouchers") },
       { label: "Cierre de caja diario", icon: "bi bi-cash-coin", command: () => goTo("/app/sales/cash-close") },
+      { label: "Utilidades de facturacion", icon: "bi bi-tools", command: () => goTo("/app/sales/utilities") },
     ],
   },
   {
@@ -179,6 +184,20 @@ const panelNavigation = computed(() => [
       { label: "Productos", icon: "bi bi-box-seam", command: () => goTo("/app/products") },
       { label: "Ingresos y egresos", icon: "bi bi-arrow-left-right", command: () => goTo("/app/inventory/movements") },
       { label: "Apertura de pacas", icon: "bi bi-box-arrow-in-down", command: () => goTo("/app/inventory/paca-opening") },
+    ],
+  },
+  {
+    label: "Informes",
+    icon: "bi bi-graph-up-arrow",
+    items: [
+      { label: "Panel de informes", icon: "bi bi-clipboard-data", command: () => goTo("/app/reports") },
+    ],
+  },
+  {
+    label: "Compras",
+    icon: "bi bi-bag-check",
+    items: [
+      { label: "Compras operativas", icon: "bi bi-clipboard-check", command: () => goTo("/app/procurement") },
     ],
   },
   {
@@ -200,6 +219,9 @@ const routeLabelMap = {
   sales: "Ventas y Facturacion",
   "cash-vouchers": "Vales de Caja",
   "cash-close": "Cierre de caja diario",
+  "sales-utilities": "Utilidades de facturacion",
+  reports: "Informes",
+  procurement: "Compras operativas",
   "business-settings": "Datos y configuraciones",
 };
 

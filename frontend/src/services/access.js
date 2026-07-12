@@ -22,6 +22,24 @@ export function fetchRoles() {
   return apiRequest("/access/roles");
 }
 
+export function createRole(payload) {
+  return apiRequest("/access/roles", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateRole(roleId, payload) {
+  return apiRequest(`/access/roles/${roleId}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchPermissions() {
+  return apiRequest("/access/permissions");
+}
+
 export function fetchBranches() {
   return apiRequest("/access/branches");
 }

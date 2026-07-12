@@ -4,10 +4,36 @@ from typing import List, Optional
 class RoleBase(BaseModel):
     name: str
 
-class RoleResponse(RoleBase):
+class PermissionResponse(BaseModel):
     id: int
+    name: str
+    label: Optional[str] = None
+    group: Optional[str] = None
+
     class Config:
         orm_mode = True
+
+
+class PermissionGroupResponse(BaseModel):
+    key: str
+    label: str
+    permissions: List[PermissionResponse]
+
+
+class RoleResponse(RoleBase):
+    id: int
+    permissions: List[PermissionResponse] = []
+    class Config:
+        orm_mode = True
+
+
+class RoleCreate(RoleBase):
+    permission_names: List[str] = []
+
+
+class RoleUpdate(BaseModel):
+    name: Optional[str] = None
+    permission_names: Optional[List[str]] = None
 
 
 class UserBase(BaseModel):
@@ -126,6 +152,7 @@ class UserResponse(UserBase):
     id: int
     is_active: bool
     roles: List[RoleResponse] = []
+    permissions: List[PermissionResponse] = []
     access_profiles: List[UserAccessProfileResponse] = []
     vendor_profile: Optional[VendorResponse] = None
 

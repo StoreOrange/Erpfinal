@@ -5,12 +5,16 @@ from sqlalchemy.orm import Session, joinedload
 from ..core.security import hash_password
 from ..database import get_db
 from ..models.inventory import Bodega
-from ..models.user import Branch, Role, User, UserAccessProfile, Vendor
+from ..models.user import Branch, Permission, Role, User, UserAccessProfile, Vendor
 from ..schemas.user import (
     BranchCreate,
     BranchResponse,
     BranchUpdate,
+    PermissionGroupResponse,
+    PermissionResponse,
+    RoleCreate,
     RoleResponse,
+    RoleUpdate,
     UserAccessProfileCreate,
     UserAccessProfileResponse,
     UserCreate,
@@ -22,6 +26,111 @@ from ..schemas.user import (
 )
 
 router = APIRouter(prefix="/access", tags=["Access Management"])
+
+# Regla de seguridad: cada modulo/ruta nueva debe registrar sus permisos aqui.
+# El rol administrador siempre se sincroniza con el catalogo completo.
+PERMISSION_GROUPS = [
+    {
+        "key": "inicio",
+        "label": "Inicio",
+        "permissions": [
+            ("menu.dashboard", "Ver inicio"),
+        ],
+    },
+    {
+        "key": "ventas",
+        "label": "Ventas y facturacion",
+        "permissions": [
+            ("menu.sales", "Ver modulo de ventas"),
+            ("menu.sales.checkout", "Acceso a punto de venta"),
+            ("menu.sales.cash_vouchers", "Vales de caja"),
+            ("menu.sales.cash_close", "Cierre de caja"),
+            ("menu.sales.utilities", "Utilidades de facturacion"),
+            ("access.sales", "Operar ventas"),
+            ("access.sales.create_invoice", "Crear facturas"),
+            ("access.sales.cash_vouchers", "Crear y editar vales"),
+            ("access.sales.cash_close", "Registrar cierres"),
+            ("access.sales.utilities", "Usar utilidades de facturacion"),
+            ("access.sales.invoice_reprint", "Reimprimir facturas"),
+            ("access.sales.invoice_void", "Anular facturas"),
+        ],
+    },
+    {
+        "key": "inventario",
+        "label": "Inventario",
+        "permissions": [
+            ("menu.inventory", "Ver modulo de inventario"),
+            ("menu.inventory.products", "Productos"),
+            ("menu.inventory.movements", "Ingresos y egresos"),
+            ("menu.inventory.production", "Produccion"),
+            ("menu.inventory.paca_opening", "Apertura de pacas"),
+            ("access.inventory", "Operar inventario"),
+            ("access.inventory.products", "Crear y editar productos"),
+            ("access.inventory.movements", "Registrar movimientos"),
+            ("access.inventory.production", "Registrar produccion"),
+            ("access.inventory.paca_opening", "Abrir pacas"),
+        ],
+    },
+    {
+        "key": "administracion",
+        "label": "Administracion",
+        "permissions": [
+            ("menu.admin", "Ver administracion"),
+            ("menu.admin.users", "Usuarios y permisos"),
+            ("menu.admin.settings", "Configuracion"),
+            ("access.admin", "Operar administracion"),
+            ("access.admin.users", "Crear y editar usuarios"),
+            ("access.admin.roles", "Crear y editar roles"),
+            ("access.admin.permissions", "Asignar permisos"),
+            ("access.admin.settings", "Editar configuracion"),
+        ],
+    },
+    {
+        "key": "informes",
+        "label": "Informes",
+        "permissions": [
+            ("menu.reports", "Ver modulo de informes"),
+            ("menu.reports.sales", "Informes de ventas"),
+            ("menu.reports.inventory", "Informes de inventario"),
+            ("menu.reports.cash", "Informes de caja"),
+            ("menu.reports.analysis", "Analisis especial"),
+            ("access.reports", "Consultar informes"),
+            ("access.reports.sales", "Consultar informes de ventas"),
+            ("access.reports.inventory", "Consultar informes de inventario"),
+            ("access.reports.cash", "Consultar informes de caja"),
+            ("access.reports.analysis", "Consultar analisis especial"),
+        ],
+    },
+    {
+        "key": "compras",
+        "label": "Compras operativas",
+        "permissions": [
+            ("menu.procurement", "Ver modulo de compras"),
+            ("menu.procurement.supplies", "Inventario de insumos"),
+            ("menu.procurement.quotes", "Solicitudes de cotizacion"),
+            ("menu.procurement.notifications", "Notificaciones por correo"),
+            ("access.procurement", "Operar compras"),
+            ("access.procurement.supplies", "Crear y mover insumos"),
+            ("access.procurement.quotes", "Crear y gestionar cotizaciones"),
+            ("access.procurement.notifications", "Configurar correos de compras"),
+        ],
+    },
+]
+
+PERMISSION_LABELS = {
+    name: label
+    for group in PERMISSION_GROUPS
+    for name, label in group["permissions"]
+}
+PERMISSION_GROUP_BY_NAME = {
+    name: group["key"]
+    for group in PERMISSION_GROUPS
+    for name, _label in group["permissions"]
+}
+
+
+def _catalog_permission_names() -> list[str]:
+    return [name for group in PERMISSION_GROUPS for name, _label in group["permissions"]]
 
 
 def _normalize(value: str | None, field: str) -> str:
@@ -53,6 +162,45 @@ def _get_or_create_roles(db: Session, names: list[str]) -> list[Role]:
             db.flush()
         roles.append(role)
     return roles
+
+
+def _get_or_create_permissions(db: Session, names: list[str]) -> list[Permission]:
+    permissions: list[Permission] = []
+    for name in names:
+        clean = _normalize(name, "Permiso")
+        permission = db.query(Permission).filter(Permission.name == clean).first()
+        if not permission:
+            permission = Permission(name=clean)
+            db.add(permission)
+            db.flush()
+        permissions.append(permission)
+    return permissions
+
+
+def _sync_admin_full_access(db: Session) -> None:
+    admin_role = db.query(Role).filter(func.lower(Role.name) == "administrador").first()
+    if not admin_role:
+        admin_role = Role(name="administrador")
+        db.add(admin_role)
+        db.flush()
+    admin_role.permissions = _get_or_create_permissions(db, _catalog_permission_names())
+
+
+def _permission_response(permission: Permission) -> PermissionResponse:
+    return PermissionResponse(
+        id=permission.id,
+        name=permission.name,
+        label=PERMISSION_LABELS.get(permission.name, permission.name),
+        group=PERMISSION_GROUP_BY_NAME.get(permission.name, "otros"),
+    )
+
+
+def _role_response(role: Role) -> RoleResponse:
+    return RoleResponse(
+        id=role.id,
+        name=role.name,
+        permissions=[_permission_response(permission) for permission in sorted(role.permissions, key=lambda item: item.name)],
+    )
 
 
 def _ensure_branch(db: Session, branch_id: int | None) -> Branch | None:
@@ -99,7 +247,8 @@ def _user_response(user: User) -> UserResponse:
         email=user.email,
         full_name=user.full_name,
         is_active=bool(user.is_active),
-        roles=[RoleResponse(id=role.id, name=role.name) for role in user.roles],
+        roles=[_role_response(role) for role in user.roles],
+        permissions=[_permission_response(permission) for permission in sorted(user.permissions, key=lambda item: item.name)],
         access_profiles=access_profiles,
         vendor_profile=_vendor_response(vendor) if vendor else None,
     )
@@ -155,7 +304,78 @@ def _apply_default_scope(db: Session, profile: UserAccessProfile) -> None:
 
 @router.get("/roles", response_model=list[RoleResponse])
 def list_roles(db: Session = Depends(get_db)):
-    return db.query(Role).order_by(Role.name).all()
+    roles = db.query(Role).options(joinedload(Role.permissions)).order_by(Role.name).all()
+    return [_role_response(role) for role in roles]
+
+
+@router.post("/roles", response_model=RoleResponse, status_code=status.HTTP_201_CREATED)
+def create_role(payload: RoleCreate, db: Session = Depends(get_db)):
+    name = _normalize(payload.name, "Rol").lower()
+    if db.query(Role).filter(func.lower(Role.name) == name).first():
+        raise HTTPException(status_code=400, detail="Rol ya registrado")
+    role = Role(name=name)
+    role.permissions = _get_or_create_permissions(db, payload.permission_names or [])
+    if name == "administrador":
+        role.permissions = _get_or_create_permissions(db, _catalog_permission_names())
+    db.add(role)
+    db.commit()
+    db.refresh(role)
+    return _role_response(role)
+
+
+@router.put("/roles/{role_id}", response_model=RoleResponse)
+def update_role(role_id: int, payload: RoleUpdate, db: Session = Depends(get_db)):
+    role = db.query(Role).options(joinedload(Role.permissions)).filter(Role.id == role_id).first()
+    if not role:
+        raise HTTPException(status_code=404, detail="Rol no encontrado")
+    data = payload.model_dump(exclude_unset=True)
+    original_name = (role.name or "").strip().lower()
+    if data.get("name") is not None:
+        name = _normalize(data["name"], "Rol").lower()
+        if original_name == "administrador" and name != "administrador":
+            raise HTTPException(status_code=400, detail="El rol administrador no se puede renombrar")
+        exists = db.query(Role).filter(func.lower(Role.name) == name, Role.id != role.id).first()
+        if exists:
+            raise HTTPException(status_code=400, detail="Rol ya registrado")
+        role.name = name
+    effective_name = (role.name or "").strip().lower()
+    if data.get("permission_names") is not None and effective_name != "administrador":
+        role.permissions = _get_or_create_permissions(db, data["permission_names"] or [])
+    if effective_name == "administrador":
+        role.permissions = _get_or_create_permissions(db, _catalog_permission_names())
+    db.add(role)
+    db.commit()
+    db.refresh(role)
+    return _role_response(role)
+
+
+@router.get("/permissions", response_model=list[PermissionGroupResponse])
+def list_permissions(db: Session = Depends(get_db)):
+    _get_or_create_permissions(db, _catalog_permission_names())
+    _sync_admin_full_access(db)
+    db.commit()
+    permissions = {permission.name: permission for permission in db.query(Permission).order_by(Permission.name).all()}
+    groups: list[PermissionGroupResponse] = []
+    for group in PERMISSION_GROUPS:
+        groups.append(
+            PermissionGroupResponse(
+                key=group["key"],
+                label=group["label"],
+                permissions=[
+                    _permission_response(permissions[name])
+                    for name, _label in group["permissions"]
+                    if name in permissions
+                ],
+            )
+        )
+    extras = [
+        _permission_response(permission)
+        for permission in permissions.values()
+        if permission.name not in PERMISSION_LABELS
+    ]
+    if extras:
+        groups.append(PermissionGroupResponse(key="otros", label="Otros permisos", permissions=extras))
+    return groups
 
 
 @router.get("/users", response_model=list[UserResponse])
@@ -163,7 +383,7 @@ def list_users(db: Session = Depends(get_db)):
     users = (
         db.query(User)
         .options(
-            joinedload(User.roles),
+            joinedload(User.roles).joinedload(Role.permissions),
             joinedload(User.access_profiles).joinedload(UserAccessProfile.sucursal),
             joinedload(User.access_profiles).joinedload(UserAccessProfile.bodega),
             joinedload(User.vendor_profile).joinedload(Vendor.sucursal),

@@ -3,12 +3,21 @@ from decimal import Decimal, ROUND_HALF_UP
 from datetime import date
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, status
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
-from ..models.inventory import Bodega, EgresoInventario, EgresoItem, EgresoTipo, Producto
+from ..models.inventory import (
+    Bodega,
+    EgresoInventario,
+    EgresoItem,
+    EgresoTipo,
+    IngresoInventario,
+    IngresoItem,
+    IngresoTipo,
+    Producto,
+)
 from ..models.sales import CashClose, CashCloseMovement, CashVoucher, Customer, SalesInvoice, SalesInvoiceItem, SalesPayment, SalesSequence
 from ..models.settings import BusinessSetting
 from ..routers.inventory import (
@@ -262,13 +271,223 @@ def update_customer(customer_id: int, payload: CustomerUpdate, db: Session = Dep
 
 
 @router.get("/invoices", response_model=List[SalesInvoiceResponse])
-def list_invoices(db: Session = Depends(get_db)):
+def list_invoices(
+    q: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    status_filter: str | None = None,
+    db: Session = Depends(get_db),
+):
+    query = db.query(SalesInvoice).options(joinedload(SalesInvoice.items), joinedload(SalesInvoice.payments))
+    search = (q or "").strip().lower()
+    if search:
+        like = f"%{search}%"
+        query = query.filter(
+            or_(
+                func.lower(SalesInvoice.invoice_number).like(like),
+                func.lower(SalesInvoice.customer_name).like(like),
+                func.lower(SalesInvoice.customer_document).like(like),
+                func.lower(SalesInvoice.vendor_name).like(like),
+                SalesInvoice.items.any(func.lower(SalesInvoiceItem.cod_producto).like(like)),
+                SalesInvoice.items.any(func.lower(SalesInvoiceItem.descripcion).like(like)),
+            )
+        )
+    if start_date:
+        query = query.filter(SalesInvoice.fecha >= start_date)
+    if end_date:
+        query = query.filter(SalesInvoice.fecha <= end_date)
+    normalized_status = (status_filter or "").strip().upper()
+    if normalized_status and normalized_status != "TODAS":
+        query = query.filter(SalesInvoice.status == normalized_status)
+    return query.order_by(SalesInvoice.fecha.desc(), SalesInvoice.id.desc()).limit(200).all()
+
+
+def _invoice_print_payload(invoice: SalesInvoice, db: Session) -> dict:
+    settings = _get_business_settings(db)
+    currency = (invoice.moneda or "CS").upper()
+    return {
+        "invoice": {
+            "id": invoice.id,
+            "invoice_number": invoice.invoice_number,
+            "fecha": invoice.fecha.isoformat() if invoice.fecha else None,
+            "created_at": invoice.created_at.isoformat() if invoice.created_at else None,
+            "customer_name": invoice.customer_name,
+            "customer_phone": invoice.customer_phone,
+            "customer_document": invoice.customer_document,
+            "customer_address": invoice.customer_address,
+            "vendor_name": invoice.vendor_name,
+            "bodega_name": invoice.bodega.name if invoice.bodega else None,
+            "condicion": invoice.condicion,
+            "moneda": currency,
+            "tasa_cambio": invoice.tasa_cambio,
+            "subtotal_usd": invoice.subtotal_usd,
+            "subtotal_cs": invoice.subtotal_cs,
+            "total_usd": invoice.total_usd,
+            "total_cs": invoice.total_cs,
+            "paid_usd": invoice.paid_usd,
+            "paid_cs": invoice.paid_cs,
+            "balance_usd": invoice.balance_usd,
+            "balance_cs": invoice.balance_cs,
+            "change_usd": invoice.change_usd,
+            "change_cs": invoice.change_cs,
+            "status": invoice.status,
+            "observacion": invoice.observacion,
+        },
+        "items": [
+            {
+                "id": item.id,
+                "producto_id": item.producto_id,
+                "cod_producto": item.cod_producto,
+                "descripcion": item.descripcion,
+                "unidad": item.unidad,
+                "cantidad": item.cantidad,
+                "precio_unitario_usd": item.precio_unitario_usd,
+                "precio_unitario_cs": item.precio_unitario_cs,
+                "subtotal_usd": item.subtotal_usd,
+                "subtotal_cs": item.subtotal_cs,
+            }
+            for item in invoice.items
+        ],
+        "payments": [
+            {
+                "forma_codigo": payment.forma_codigo,
+                "forma_nombre": payment.forma_nombre,
+                "moneda": payment.moneda,
+                "monto": payment.monto,
+                "monto_usd": payment.monto_usd,
+                "monto_cs": payment.monto_cs,
+                "referencia": payment.referencia,
+            }
+            for payment in invoice.payments
+        ],
+        "business": {
+            "business_name": settings.business_name,
+            "legal_name": settings.legal_name,
+            "trade_name": settings.trade_name,
+            "address": settings.address,
+            "ruc": settings.ruc,
+            "phone": settings.phone or settings.phones,
+            "email": settings.email,
+            "logo_invoice": settings.logo_invoice,
+        },
+    }
+
+
+@router.get("/invoices/{invoice_id}/print")
+def get_invoice_print(invoice_id: int, db: Session = Depends(get_db)):
+    invoice = (
+        db.query(SalesInvoice)
+        .options(
+            joinedload(SalesInvoice.items),
+            joinedload(SalesInvoice.payments),
+            joinedload(SalesInvoice.bodega),
+        )
+        .filter(SalesInvoice.id == invoice_id)
+        .first()
+    )
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Factura no encontrada")
+    return _invoice_print_payload(invoice, db)
+
+
+@router.post("/invoices/{invoice_id}/void", response_model=SalesInvoiceResponse)
+def void_invoice(invoice_id: int, payload: dict | None = Body(default=None), db: Session = Depends(get_db)):
+    invoice = (
+        db.query(SalesInvoice)
+        .options(
+            joinedload(SalesInvoice.items),
+            joinedload(SalesInvoice.payments),
+            joinedload(SalesInvoice.egreso).joinedload(EgresoInventario.items),
+        )
+        .filter(SalesInvoice.id == invoice_id)
+        .first()
+    )
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Factura no encontrada")
+    if (invoice.status or "").upper() == "ANULADA":
+        raise HTTPException(status_code=400, detail="La factura ya esta anulada")
+
+    payload = payload or {}
+    motivo = (payload.get("motivo") or "").strip()
+    usuario = (payload.get("usuario_registro") or "").strip() or "Sistema"
+    if len(motivo) < 8:
+        raise HTTPException(status_code=400, detail="Indica un motivo de anulacion mas descriptivo")
+
+    ingreso_tipo = db.query(IngresoTipo).filter(func.lower(IngresoTipo.nombre) == "anulacion de venta").first()
+    if not ingreso_tipo:
+        ingreso_tipo = IngresoTipo(nombre="Anulacion de Venta", requiere_proveedor=False)
+        db.add(ingreso_tipo)
+        db.flush()
+
+    tasa = Decimal(str(invoice.tasa_cambio or 0))
+    ingreso = IngresoInventario(
+        tipo_id=ingreso_tipo.id,
+        bodega_id=invoice.bodega_id,
+        proveedor_id=None,
+        usuario_id=None,
+        fecha=invoice.fecha,
+        moneda=invoice.moneda,
+        tasa_cambio=invoice.tasa_cambio,
+        observacion=f"Anulacion de factura {invoice.invoice_number}: {motivo}"[:300],
+        usuario_registro=usuario,
+    )
+    db.add(ingreso)
+    db.flush()
+
+    egreso_items_by_product = {}
+    if invoice.egreso:
+        for egreso_item in invoice.egreso.items:
+            egreso_items_by_product.setdefault(egreso_item.producto_id, egreso_item)
+
+    total_usd = Decimal("0")
+    total_cs = Decimal("0")
+    touched_products: set[int] = set()
+    for item in invoice.items:
+        cantidad = Decimal(str(item.cantidad or 0))
+        egreso_item = egreso_items_by_product.get(item.producto_id)
+        producto = db.query(Producto).filter(Producto.id == item.producto_id).first()
+        if egreso_item:
+            cost_usd = _money(egreso_item.costo_unitario_usd)
+            cost_cs = _money(egreso_item.costo_unitario_cs)
+        elif producto:
+            settings = _get_business_settings(db)
+            cost_usd, cost_cs = _product_cost_pair(producto, tasa, settings)
+        else:
+            cost_usd = Decimal("0.00")
+            cost_cs = Decimal("0.00")
+        subtotal_usd = _money(cost_usd * cantidad)
+        subtotal_cs = _money(cost_cs * cantidad)
+        total_usd += subtotal_usd
+        total_cs += subtotal_cs
+        touched_products.add(item.producto_id)
+        db.add(
+            IngresoItem(
+                ingreso_id=ingreso.id,
+                producto_id=item.producto_id,
+                cantidad=cantidad,
+                costo_unitario_usd=cost_usd,
+                costo_unitario_cs=cost_cs,
+                subtotal_usd=subtotal_usd,
+                subtotal_cs=subtotal_cs,
+            )
+        )
+
+    ingreso.total_usd = _money(total_usd)
+    ingreso.total_cs = _money(total_cs)
+    previous_note = (invoice.observacion or "").strip()
+    invoice.status = "ANULADA"
+    invoice.observacion = f"{previous_note}\nANULADA por {usuario}: {motivo}".strip()
+    db.add(invoice)
+
+    for product_id in touched_products:
+        _rebuild_global_saldo(db, product_id)
+
+    db.commit()
     return (
         db.query(SalesInvoice)
         .options(joinedload(SalesInvoice.items), joinedload(SalesInvoice.payments))
-        .order_by(SalesInvoice.id.desc())
-        .limit(100)
-        .all()
+        .filter(SalesInvoice.id == invoice.id)
+        .first()
     )
 
 

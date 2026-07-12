@@ -21,6 +21,10 @@
           <span>Sucursales</span>
           <strong>{{ branches.length }}</strong>
         </div>
+        <div class="module-meta-box">
+          <span>Roles</span>
+          <strong>{{ roles.length }}</strong>
+        </div>
       </div>
     </header>
 
@@ -70,6 +74,57 @@
         </Column>
         <template #empty>
           <div class="empty-state">No hay usuarios registrados.</div>
+        </template>
+      </DataTable>
+    </section>
+
+    <section v-else-if="activeTab === 'roles'" class="panel-card access-panel">
+      <div class="panel-head">
+        <div>
+          <span class="products-section-kicker">Roles del sistema</span>
+          <h3>Permisos por rol</h3>
+        </div>
+        <Button icon="bi bi-shield-plus" label="Nuevo rol" @click="openRoleDialog()" />
+      </div>
+
+      <div class="permission-summary-grid">
+        <article v-for="group in permissionGroups" :key="group.key" class="permission-summary">
+          <span>{{ group.label }}</span>
+          <strong>{{ group.permissions.length }}</strong>
+          <small>permisos configurables</small>
+        </article>
+      </div>
+
+      <DataTable :value="roles" class="enterprise-table access-table" stripedRows paginator :rows="8" responsive-layout="scroll">
+        <Column field="name" header="Rol" sortable>
+          <template #body="{ data }">
+            <div class="access-main-cell">
+              <strong>{{ data.name }}</strong>
+              <small>{{ roleUserCount(data.name) }} usuario(s) asignado(s)</small>
+            </div>
+          </template>
+        </Column>
+        <Column header="Permisos">
+          <template #body="{ data }">
+            <div class="access-tags">
+              <Tag v-for="permission in previewPermissions(data)" :key="permission.name" severity="info" :value="permission.label || permission.name" rounded />
+              <Tag v-if="(data.permissions || []).length > 3" severity="secondary" :value="`+${data.permissions.length - 3}`" rounded />
+              <span v-if="!(data.permissions || []).length" class="muted-text">Sin permisos</span>
+            </div>
+          </template>
+        </Column>
+        <Column header="Cobertura" style="width: 11rem">
+          <template #body="{ data }">
+            <span>{{ (data.permissions || []).length }} / {{ permissionTotal }}</span>
+          </template>
+        </Column>
+        <Column header="Acciones" style="width: 10rem">
+          <template #body="{ data }">
+            <Button size="small" severity="secondary" variant="outlined" icon="bi bi-pencil" label="Editar" @click="openRoleDialog(data)" />
+          </template>
+        </Column>
+        <template #empty>
+          <div class="empty-state">No hay roles registrados.</div>
         </template>
       </DataTable>
     </section>
@@ -194,6 +249,35 @@
       </template>
     </Dialog>
 
+    <Dialog v-model:visible="roleDialog" modal :header="roleForm.id ? 'Editar rol' : 'Nuevo rol'" class="access-dialog" :style="{ width: 'min(920px, 96vw)' }">
+      <form class="role-editor" @submit.prevent="submitRole">
+        <label class="field-group role-name-field">
+          <span>Nombre del rol</span>
+          <InputText v-model.trim="roleForm.name" placeholder="supervisor" :disabled="isEditingAdministrator" />
+        </label>
+        <p v-if="isEditingAdministrator" class="admin-lock-note">
+          El administrador mantiene acceso completo por defecto. Sus permisos no se pueden reducir.
+        </p>
+
+        <div class="permission-editor-grid">
+          <section v-for="group in permissionGroups" :key="group.key" class="permission-group">
+            <header>
+              <strong>{{ group.label }}</strong>
+              <small>{{ selectedInGroup(group) }} / {{ group.permissions.length }}</small>
+            </header>
+            <label v-for="permission in group.permissions" :key="permission.name" class="permission-check">
+              <input v-model="roleForm.permission_names" type="checkbox" :value="permission.name" :disabled="isEditingAdministrator" />
+              <span>{{ permission.label || permission.name }}</span>
+            </label>
+          </section>
+        </div>
+      </form>
+      <template #footer>
+        <Button severity="secondary" variant="outlined" label="Cancelar" @click="roleDialog = false" />
+        <Button :loading="saving" label="Guardar rol" @click="submitRole" />
+      </template>
+    </Dialog>
+
     <Dialog v-model:visible="vendorDialog" modal :header="vendorForm.id ? 'Editar vendedor' : 'Nuevo vendedor'" class="access-dialog" :style="{ width: 'min(780px, 94vw)' }">
       <form class="access-form-grid" @submit.prevent="submitVendor">
         <label class="field-group">
@@ -311,14 +395,17 @@ import {
   createAccessProfile,
   createAccessUser,
   createBranch,
+  createRole,
   createVendor,
   fetchAccessUsers,
   fetchBranches,
+  fetchPermissions,
   fetchRoles,
   fetchVendors,
   updateAccessProfile,
   updateAccessUser,
   updateBranch,
+  updateRole,
   updateVendor,
 } from "../../services/access";
 import { readStoredUser } from "../../services/auth";
@@ -332,14 +419,17 @@ const users = ref([]);
 const vendors = ref([]);
 const branches = ref([]);
 const roles = ref([]);
+const permissionGroups = ref([]);
 const bodegas = ref([]);
 const userDialog = ref(false);
+const roleDialog = ref(false);
 const vendorDialog = ref(false);
 const branchDialog = ref(false);
 const profileDialog = ref(false);
 
 const tabs = [
   { key: "users", label: "Usuarios", icon: "bi-people" },
+  { key: "roles", label: "Roles y permisos", icon: "bi-shield-check" },
   { key: "vendors", label: "Vendedores", icon: "bi-person-badge" },
   { key: "branches", label: "Sucursales", icon: "bi-building" },
   { key: "profiles", label: "Accesos", icon: "bi-shield-lock" },
@@ -354,6 +444,7 @@ const scopeOptions = [
 ];
 
 const userForm = reactive(getEmptyUser());
+const roleForm = reactive(getEmptyRole());
 const vendorForm = reactive(getEmptyVendor());
 const branchForm = reactive(getEmptyBranch());
 const profileForm = reactive(getEmptyProfile());
@@ -366,9 +457,15 @@ const currentRole = computed(() => {
   return roleList.length ? roleList[0].name : "Sin rol";
 });
 const accessProfiles = computed(() => users.value.flatMap((user) => user.access_profiles || []));
+const permissionTotal = computed(() => permissionGroups.value.reduce((total, group) => total + group.permissions.length, 0));
+const isEditingAdministrator = computed(() => (roleForm.name || "").trim().toLowerCase() === "administrador");
 
 function getEmptyUser() {
   return { id: null, full_name: "", email: "", password: "", is_active: true, role_names: ["vendedor"] };
+}
+
+function getEmptyRole() {
+  return { id: null, name: "", permission_names: [] };
 }
 
 function getEmptyVendor() {
@@ -398,17 +495,19 @@ function defaultAccessText(user) {
 }
 
 async function loadData() {
-  const [userData, vendorData, branchData, roleData, catalogData] = await Promise.all([
+  const [userData, vendorData, branchData, roleData, permissionData, catalogData] = await Promise.all([
     fetchAccessUsers(),
     fetchVendors(true),
     fetchBranches(),
     fetchRoles(),
+    fetchPermissions(),
     fetchInventoryCatalogs(),
   ]);
   users.value = userData || [];
   vendors.value = vendorData || [];
   branches.value = branchData || [];
   roles.value = roleData || [];
+  permissionGroups.value = permissionData || [];
   bodegas.value = catalogData.bodegas || [];
 }
 
@@ -417,6 +516,13 @@ function openUserDialog(row = null) {
     ? { ...row, password: "", role_names: (row.roles || []).map((role) => role.name) }
     : {});
   userDialog.value = true;
+}
+
+function openRoleDialog(row = null) {
+  Object.assign(roleForm, getEmptyRole(), row
+    ? { ...row, permission_names: (row.permissions || []).map((permission) => permission.name) }
+    : {});
+  roleDialog.value = true;
 }
 
 function openVendorDialog(row = null) {
@@ -444,6 +550,25 @@ async function submitUser() {
     await loadData();
     userDialog.value = false;
     toast.add({ severity: "success", summary: "Usuario guardado", detail: "Acceso actualizado correctamente.", life: 3000 });
+  } catch (error) {
+    toast.add({ severity: "error", summary: "No se pudo guardar", detail: error.message, life: 4200 });
+  } finally {
+    saving.value = false;
+  }
+}
+
+async function submitRole() {
+  saving.value = true;
+  try {
+    const payload = {
+      name: roleForm.name,
+      permission_names: roleForm.permission_names,
+    };
+    if (roleForm.id) await updateRole(roleForm.id, payload);
+    else await createRole(payload);
+    await loadData();
+    roleDialog.value = false;
+    toast.add({ severity: "success", summary: "Rol guardado", detail: "Permisos del rol actualizados.", life: 3000 });
   } catch (error) {
     toast.add({ severity: "error", summary: "No se pudo guardar", detail: error.message, life: 4200 });
   } finally {
@@ -499,6 +624,18 @@ async function submitProfile() {
   }
 }
 
+function previewPermissions(role) {
+  return (role.permissions || []).slice(0, 3);
+}
+
+function roleUserCount(roleName) {
+  return users.value.filter((user) => (user.roles || []).some((role) => role.name === roleName)).length;
+}
+
+function selectedInGroup(group) {
+  return group.permissions.filter((permission) => roleForm.permission_names.includes(permission.name)).length;
+}
+
 onMounted(async () => {
   try {
     await loadData();
@@ -507,3 +644,107 @@ onMounted(async () => {
   }
 });
 </script>
+
+<style scoped>
+.permission-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.permission-summary {
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  background: rgba(248, 250, 252, 0.78);
+}
+
+.permission-summary span,
+.permission-summary small {
+  display: block;
+  color: #64748b;
+  font-size: 0.78rem;
+}
+
+.permission-summary strong {
+  display: block;
+  color: #0f172a;
+  font-size: 1.55rem;
+  line-height: 1.15;
+  margin: 0.15rem 0;
+}
+
+.role-editor {
+  display: grid;
+  gap: 1rem;
+}
+
+.role-name-field {
+  max-width: 24rem;
+}
+
+.admin-lock-note {
+  border: 1px solid rgba(14, 116, 144, 0.24);
+  border-radius: 8px;
+  background: rgba(236, 254, 255, 0.72);
+  color: #155e75;
+  margin: 0;
+  padding: 0.7rem 0.85rem;
+  font-size: 0.86rem;
+}
+
+.permission-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.85rem;
+  max-height: min(58vh, 620px);
+  overflow: auto;
+  padding-right: 0.25rem;
+}
+
+.permission-group {
+  border: 1px solid rgba(148, 163, 184, 0.42);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 0.8rem;
+}
+
+.permission-group header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+  margin-bottom: 0.55rem;
+}
+
+.permission-group header strong {
+  color: #0f172a;
+  font-size: 0.9rem;
+}
+
+.permission-group header small,
+.muted-text {
+  color: #64748b;
+  font-size: 0.78rem;
+}
+
+.permission-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.42rem 0.2rem;
+  color: #334155;
+  font-size: 0.86rem;
+  line-height: 1.25;
+}
+
+.permission-check input {
+  width: 1rem;
+  height: 1rem;
+  margin-top: 0.05rem;
+  accent-color: #0f766e;
+}
+</style>

@@ -40,6 +40,16 @@ export const appNavigation = [
     route: "/app/sales/cash-close",
   },
   {
+    label: "Informes",
+    icon: "bi-graph-up-arrow",
+    route: "/app/reports",
+  },
+  {
+    label: "Compras Operativas",
+    icon: "bi-bag-check",
+    route: "/app/procurement",
+  },
+  {
     label: "Datos y Configuraciones",
     icon: "bi-buildings",
     route: "/app/settings/business",

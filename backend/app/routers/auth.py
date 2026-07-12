@@ -31,7 +31,15 @@ def _serialize_user(user: User) -> dict:
         "email": user.email,
         "full_name": user.full_name,
         "is_active": user.is_active,
-        "roles": [{"id": role.id, "name": role.name} for role in user.roles],
+        "roles": [
+            {
+                "id": role.id,
+                "name": role.name,
+                "permissions": [{"id": permission.id, "name": permission.name} for permission in role.permissions],
+            }
+            for role in user.roles
+        ],
+        "permissions": [{"id": permission.id, "name": permission.name} for permission in user.permissions],
         "access_profiles": [
             {
                 "id": profile.id,

@@ -8,8 +8,11 @@ import ProductionView from "../views/inventory/ProductionView.vue";
 import SalesView from "../views/sales/SalesView.vue";
 import CashCloseView from "../views/sales/CashCloseView.vue";
 import CashVouchersView from "../views/sales/CashVouchersView.vue";
+import SalesUtilitiesView from "../views/sales/SalesUtilitiesView.vue";
 import BusinessSettingsView from "../views/settings/BusinessSettingsView.vue";
 import UsersView from "../views/users/UsersView.vue";
+import ReportsView from "../views/reports/ReportsView.vue";
+import ProcurementView from "../views/procurement/ProcurementView.vue";
 
 export const routes = [
   {
@@ -71,6 +74,21 @@ export const routes = [
         path: "sales/cash-vouchers",
         name: "cash-vouchers",
         component: CashVouchersView,
+      },
+      {
+        path: "sales/utilities",
+        name: "sales-utilities",
+        component: SalesUtilitiesView,
+      },
+      {
+        path: "reports",
+        name: "reports",
+        component: ReportsView,
+      },
+      {
+        path: "procurement",
+        name: "procurement",
+        component: ProcurementView,
       },
       {
         path: "settings/business",

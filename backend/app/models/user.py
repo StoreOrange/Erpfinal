@@ -11,6 +11,13 @@ user_roles = Table(
     Column("role_id", Integer, ForeignKey("roles.id", ondelete="CASCADE"))
 )
 
+role_permissions = Table(
+    "role_permissions",
+    Base.metadata,
+    Column("role_id", Integer, ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True),
+    Column("permission_id", Integer, ForeignKey("permissions.id", ondelete="CASCADE"), primary_key=True),
+)
+
 
 class Role(Base):
     __tablename__ = "roles"
@@ -19,6 +26,16 @@ class Role(Base):
     name = Column(String(50), unique=True, nullable=False)
 
     users = relationship("User", secondary=user_roles, back_populates="roles")
+    permissions = relationship("Permission", secondary=role_permissions, back_populates="roles")
+
+
+class Permission(Base):
+    __tablename__ = "permissions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(80), unique=True, nullable=False)
+
+    roles = relationship("Role", secondary=role_permissions, back_populates="permissions")
 
 
 class User(Base):
@@ -33,6 +50,14 @@ class User(Base):
     roles = relationship("Role", secondary=user_roles, back_populates="users")
     access_profiles = relationship("UserAccessProfile", back_populates="user", cascade="all, delete-orphan")
     vendor_profile = relationship("Vendor", back_populates="user", uselist=False)
+
+    @property
+    def permissions(self):
+        permission_map = {}
+        for role in self.roles:
+            for permission in role.permissions:
+                permission_map[permission.id] = permission
+        return list(permission_map.values())
 
 
 class Branch(Base):

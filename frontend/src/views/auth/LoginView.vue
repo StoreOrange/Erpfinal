@@ -98,7 +98,7 @@
           <span>Usuario o correo</span>
           <IconField class="auth-input-shell">
             <InputIcon class="bi bi-person" />
-            <InputText v-model="email" class="form-control" placeholder="administrador" autocomplete="username" />
+            <InputText v-model="email" class="form-control" placeholder="Ingresa tu usuario" autocomplete="username" />
           </IconField>
         </label>
 
@@ -156,8 +156,8 @@ import {
 } from "../../services/settings";
 
 const router = useRouter();
-const email = ref("administrador");
-const password = ref("020416");
+const email = ref("");
+const password = ref("");
 const error = ref(null);
 const loading = ref(false);
 const branding = ref(

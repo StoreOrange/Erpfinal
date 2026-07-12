@@ -37,8 +37,25 @@ export function createSalesInvoice(payload) {
   });
 }
 
-export function fetchSalesInvoices() {
-  return apiRequest("/sales-api/invoices");
+export function fetchSalesInvoices(filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.q) params.set("q", filters.q);
+  if (filters.start_date) params.set("start_date", filters.start_date);
+  if (filters.end_date) params.set("end_date", filters.end_date);
+  if (filters.status_filter) params.set("status_filter", filters.status_filter);
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return apiRequest(`/sales-api/invoices${suffix}`);
+}
+
+export function fetchSalesInvoicePrint(invoiceId) {
+  return apiRequest(`/sales-api/invoices/${invoiceId}/print`);
+}
+
+export function voidSalesInvoice(invoiceId, payload) {
+  return apiRequest(`/sales-api/invoices/${invoiceId}/void`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export function fetchCashCloseSummary(fecha, bodegaId = null) {

@@ -10,10 +10,12 @@ from .config import settings as app_settings
 from .core.security import hash_password
 from .database import Base, SessionLocal, engine
 from .models.inventory import Bodega, EgresoTipo, IngresoTipo, Linea, Marca, Producto, ProductoCombo, Proveedor, Segmento, UnidadMedida
+from .models.notification import EmailConfig, NotificationRecipient
+from .models.procurement import QuoteRequest, QuoteRequestLine, SupplierQuote, SupplyItem, SupplyMovement
 from .models.sales import CashVoucher, Customer, SalesInvoice, SalesInvoiceItem, SalesPayment, SalesSequence
 from .models.settings import BusinessSetting, CompanyEnvironment, ExchangeRate
-from .models.user import Branch, Role, User, UserAccessProfile, Vendor
-from .routers import access, auth, inventory, sales, settings
+from .models.user import Branch, Permission, Role, User, UserAccessProfile, Vendor
+from .routers import access, auth, inventory, procurement, reports, sales, settings
 
 app = FastAPI(title="Sistema de planificacion de recursos empresariales Backend")
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -68,12 +70,107 @@ def ensure_cash_voucher_columns():
 
 ensure_cash_voucher_columns()
 
+
+def ensure_notification_tables():
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS email_config (
+                    id SERIAL PRIMARY KEY,
+                    sender_email VARCHAR(160) NOT NULL DEFAULT '',
+                    sender_name VARCHAR(160),
+                    active BOOLEAN DEFAULT FALSE,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS email_recipients (
+                    id SERIAL PRIMARY KEY,
+                    email VARCHAR(160) UNIQUE NOT NULL,
+                    name VARCHAR(160),
+                    active BOOLEAN DEFAULT TRUE,
+                    procurement_quote_active BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+                """
+            )
+        )
+        connection.execute(text("ALTER TABLE email_recipients ADD COLUMN IF NOT EXISTS procurement_quote_active BOOLEAN DEFAULT TRUE"))
+
+
+ensure_notification_tables()
+
 app.include_router(auth.router)
 app.include_router(access.router)
 app.include_router(inventory.router)
+app.include_router(procurement.router)
+app.include_router(reports.router)
 app.include_router(sales.router)
 app.include_router(settings.router)
 app.mount("/media", StaticFiles(directory=UPLOADS_DIR), name="media")
+
+# Regla de seguridad: cada modulo nuevo debe registrar sus permisos aqui.
+# El rol administrador siempre recibe el catalogo completo.
+ACCESS_PERMISSION_GROUPS = [
+    ("menu.dashboard", "administrador", "supervisor", "vendedor", "caja", "inventario"),
+    ("menu.sales", "administrador", "supervisor", "vendedor", "caja"),
+    ("menu.sales.checkout", "administrador", "supervisor", "vendedor", "caja"),
+    ("menu.sales.cash_vouchers", "administrador", "supervisor", "caja"),
+    ("menu.sales.cash_close", "administrador", "supervisor", "caja"),
+    ("menu.sales.utilities", "administrador", "supervisor", "caja"),
+    ("access.sales", "administrador", "supervisor", "vendedor", "caja"),
+    ("access.sales.create_invoice", "administrador", "supervisor", "vendedor", "caja"),
+    ("access.sales.cash_vouchers", "administrador", "supervisor", "caja"),
+    ("access.sales.cash_close", "administrador", "supervisor", "caja"),
+    ("access.sales.utilities", "administrador", "supervisor", "caja"),
+    ("access.sales.invoice_reprint", "administrador", "supervisor", "caja"),
+    ("access.sales.invoice_void", "administrador", "supervisor"),
+    ("menu.inventory", "administrador", "supervisor", "inventario"),
+    ("menu.inventory.products", "administrador", "supervisor", "inventario"),
+    ("menu.inventory.movements", "administrador", "supervisor", "inventario"),
+    ("menu.inventory.production", "administrador", "supervisor", "inventario"),
+    ("menu.inventory.paca_opening", "administrador", "supervisor", "inventario"),
+    ("access.inventory", "administrador", "supervisor", "inventario"),
+    ("access.inventory.products", "administrador", "supervisor", "inventario"),
+    ("access.inventory.movements", "administrador", "supervisor", "inventario"),
+    ("access.inventory.production", "administrador", "supervisor", "inventario"),
+    ("access.inventory.paca_opening", "administrador", "supervisor", "inventario"),
+    ("menu.admin", "administrador", "supervisor"),
+    ("menu.admin.users", "administrador", "supervisor"),
+    ("menu.admin.settings", "administrador"),
+    ("access.admin", "administrador", "supervisor"),
+    ("access.admin.users", "administrador", "supervisor"),
+    ("access.admin.roles", "administrador"),
+    ("access.admin.permissions", "administrador"),
+    ("access.admin.settings", "administrador"),
+    ("menu.reports", "administrador", "supervisor"),
+    ("menu.reports.sales", "administrador", "supervisor"),
+    ("menu.reports.inventory", "administrador", "supervisor", "inventario"),
+    ("menu.reports.cash", "administrador", "supervisor", "caja"),
+    ("menu.reports.analysis", "administrador", "supervisor", "inventario"),
+    ("access.reports", "administrador", "supervisor"),
+    ("access.reports.sales", "administrador", "supervisor"),
+    ("access.reports.inventory", "administrador", "supervisor", "inventario"),
+    ("access.reports.cash", "administrador", "supervisor", "caja"),
+    ("access.reports.analysis", "administrador", "supervisor", "inventario"),
+    ("menu.procurement", "administrador", "supervisor"),
+    ("menu.procurement.supplies", "administrador", "supervisor"),
+    ("menu.procurement.quotes", "administrador", "supervisor"),
+    ("menu.procurement.notifications", "administrador", "supervisor"),
+    ("access.procurement", "administrador", "supervisor"),
+    ("access.procurement.supplies", "administrador", "supervisor"),
+    ("access.procurement.quotes", "administrador", "supervisor"),
+    ("access.procurement.notifications", "administrador", "supervisor"),
+]
+
+
+def catalog_permission_names() -> list[str]:
+    return [permission_name for permission_name, *_role_names in ACCESS_PERMISSION_GROUPS]
 
 
 @app.get("/")
@@ -529,6 +626,37 @@ def seed_business_settings():
 def seed_access_catalogs():
     db = SessionLocal()
     try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS permissions (
+                        id SERIAL PRIMARY KEY,
+                        name VARCHAR(80) UNIQUE NOT NULL
+                    )
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS role_permissions (
+                        role_id INTEGER REFERENCES roles(id) ON DELETE CASCADE,
+                        permission_id INTEGER REFERENCES permissions(id) ON DELETE CASCADE,
+                        PRIMARY KEY (role_id, permission_id)
+                    )
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    CREATE UNIQUE INDEX IF NOT EXISTS uq_role_permissions_idx
+                    ON role_permissions (role_id, permission_id)
+                    """
+                )
+            )
+
         role_names = ["administrador", "vendedor", "caja", "inventario", "supervisor"]
         roles = {}
         for role_name in role_names:
@@ -538,6 +666,24 @@ def seed_access_catalogs():
                 db.add(role)
                 db.flush()
             roles[role_name] = role
+
+        permissions = {}
+        for permission_name in catalog_permission_names():
+            permission = db.query(Permission).filter(Permission.name == permission_name).first()
+            if not permission:
+                permission = Permission(name=permission_name)
+                db.add(permission)
+                db.flush()
+            permissions[permission_name] = permission
+
+        for permission_name, *allowed_roles in ACCESS_PERMISSION_GROUPS:
+            permission = permissions[permission_name]
+            for role_name in allowed_roles:
+                role = roles.get(role_name)
+                if role and permission not in role.permissions:
+                    role.permissions.append(permission)
+
+        roles["administrador"].permissions = [permissions[name] for name in catalog_permission_names()]
 
         admin = db.query(User).filter(User.email == "administrador").first()
         branch = db.query(Branch).filter(Branch.code == "SUC-001").first()
