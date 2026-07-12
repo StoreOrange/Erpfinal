@@ -141,7 +141,7 @@ const flatNavigation = computed(() => navigation);
 const currentPageTitle = computed(() => routeLabelMap[route.name] || "Sistema empresarial");
 const breadcrumbItems = computed(() => {
   const current = currentPageTitle.value;
-  if (route.name === "dashboard") return [{ label: "Dashboard" }];
+  if (route.name === "dashboard") return [{ label: "Inicio" }];
   const section = route.path.includes("/inventory")
     ? "Inventario"
     : route.path.includes("/settings")

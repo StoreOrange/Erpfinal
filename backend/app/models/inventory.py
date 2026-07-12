@@ -1,3 +1,13 @@
+"""Modelos de inventario.
+
+Hecho por Carlos.
+Colaboracion academica: Oded Garcia y Carlos Ramirez.
+
+Recordatorio para el equipo:
+estos modelos representan tablas de base de datos. No colocar aqui reglas
+visuales ni codigo de interfaz; solo estructura de datos y relaciones.
+"""
+
 from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func

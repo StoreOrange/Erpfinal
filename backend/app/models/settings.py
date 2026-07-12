@@ -1,3 +1,12 @@
+"""Modelos de configuracion del sistema.
+
+Hecho por Carlos.
+Colaboracion academica: Oded Garcia y Carlos Ramirez.
+
+Aqui se guardan datos generales de empresa, entornos y tasa de cambio. Son
+datos base que afectan varias pantallas del ERP.
+"""
+
 from datetime import datetime
 
 from sqlalchemy import Boolean, Column, Date, DateTime, Integer, Numeric, String, Text

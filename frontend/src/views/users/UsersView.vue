@@ -1,3 +1,9 @@
+<!--
+  Usuarios, roles y accesos.
+  Hecho por Carlos.
+  Colaboracion academica: Oded Garcia y Carlos Ramirez.
+  Recordatorio: el administrador siempre conserva acceso completo.
+-->
 <template>
   <section class="page-section users-page access-page">
     <header class="module-hero">

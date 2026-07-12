@@ -1,3 +1,9 @@
+<!--
+  Pantalla principal de ventas.
+  Hecho por Carlos.
+  Colaboracion academica: Oded Garcia y Carlos Ramirez.
+  Recordatorio: cualquier cambio aqui debe probar facturacion e inventario.
+-->
 <template>
   <section class="page-section sales-page" :class="salesInterfaceClass">
     <header class="sales-header-shell panel-card">

@@ -1,3 +1,9 @@
+<!--
+  Configuracion general del negocio.
+  Hecho por Carlos.
+  Colaboracion academica: Oded Garcia y Carlos Ramirez.
+  Nota: estos datos se usan en marcas, logos, moneda y documentos del sistema.
+-->
 <template>
   <section class="page-section settings-page">
     <div class="module-hero">

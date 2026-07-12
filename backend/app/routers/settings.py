@@ -1,3 +1,12 @@
+"""Router de configuracion general.
+
+Hecho por Carlos.
+Colaboracion academica: Oded Garcia y Carlos Ramirez.
+
+Aqui se editan datos de empresa, entornos y configuraciones base. Estos datos
+se usan en varias partes del frontend.
+"""
+
 from pathlib import Path
 import re
 from uuid import uuid4

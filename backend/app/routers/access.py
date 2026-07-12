@@ -1,3 +1,12 @@
+"""Router de usuarios, roles, permisos y accesos.
+
+Hecho por Carlos.
+Colaboracion academica: Oded Garcia y Carlos Ramirez.
+
+Este modulo es delicado porque controla seguridad. Si se agrega una pantalla o
+modulo nuevo, tambien se debe registrar su permiso aqui.
+"""
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload

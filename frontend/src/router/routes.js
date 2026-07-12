@@ -14,6 +14,9 @@ import UsersView from "../views/users/UsersView.vue";
 import ReportsView from "../views/reports/ReportsView.vue";
 import ProcurementView from "../views/procurement/ProcurementView.vue";
 
+// Rutas principales del frontend.
+// Cada objeto representa una pantalla disponible en la aplicacion.
+// Las pantallas protegidas viven dentro de /app y usan el layout AppShell.
 export const routes = [
   {
     path: "/",

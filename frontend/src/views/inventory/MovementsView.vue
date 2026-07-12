@@ -1,3 +1,9 @@
+<!--
+  Pantalla de ingresos y egresos de inventario.
+  Hecho por Carlos.
+  Colaboracion academica: Oded Garcia y Carlos Ramirez.
+  Recordatorio: revisar bien cantidades y bodegas antes de guardar movimientos.
+-->
 <template>
   <section class="page-section movements-page">
     <header class="module-hero movements-compact-hero">

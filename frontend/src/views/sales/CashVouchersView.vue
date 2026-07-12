@@ -1,3 +1,9 @@
+<!--
+  Vales de caja.
+  Hecho por Carlos.
+  Colaboracion academica: Oded Garcia y Carlos Ramirez.
+  Recordatorio: clasificar bien ingresos y egresos para no afectar caja.
+-->
 <template>
   <section class="page-section cash-vouchers-page">
     <header class="module-hero">

@@ -1,3 +1,12 @@
+"""Router de ventas, caja y utilidades de facturacion.
+
+Hecho por Carlos.
+Colaboracion academica: Oded Garcia y Carlos Ramirez.
+
+Este archivo concentra procesos sensibles: facturar, cerrar caja, emitir vales,
+reimprimir y anular facturas. Probar bien antes de cambiar calculos.
+"""
+
 import json
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import date
@@ -51,10 +60,12 @@ MONEY = Decimal("0.01")
 
 
 def _money(value: Decimal | int | float | str | None) -> Decimal:
+    # Normaliza cualquier monto a dos decimales para evitar diferencias por redondeo.
     return Decimal(str(value or 0)).quantize(MONEY, rounding=ROUND_HALF_UP)
 
 
 def _next_invoice_number(db: Session) -> str:
+    # Genera el siguiente numero de factura POS y bloquea la secuencia mientras se actualiza.
     sequence = db.query(SalesSequence).filter(SalesSequence.prefix == "POS").with_for_update().first()
     if not sequence:
         sequence = SalesSequence(prefix="POS", current_value=0, is_active=True)
@@ -65,22 +76,26 @@ def _next_invoice_number(db: Session) -> str:
 
 
 def _peek_invoice_number(db: Session) -> str:
+    # Muestra el proximo numero de factura sin consumir la secuencia.
     sequence = db.query(SalesSequence).filter(SalesSequence.prefix == "POS").first()
     next_value = int(sequence.current_value or 0) + 1 if sequence else 1
     return f"POS-{next_value:06d}"
 
 
 def _next_cash_close_number(db: Session) -> str:
+    # Numero simple para identificar cierres de caja.
     next_value = (db.query(func.count(CashClose.id)).scalar() or 0) + 1
     return f"CC-{next_value:06d}"
 
 
 def _next_cash_voucher_number(db: Session) -> str:
+    # Numero simple para identificar vales de caja.
     next_value = (db.query(func.count(CashVoucher.id)).scalar() or 0) + 1
     return f"VC-{next_value:06d}"
 
 
 def _payment_bucket(payment: SalesPayment) -> str:
+    # Clasifica el pago para separar efectivo, tarjeta, transferencia y otros en cierre de caja.
     code = (payment.forma_codigo or "").strip().lower()
     name = (payment.forma_nombre or "").strip().lower()
     if code in {"cash", "efectivo"} or "efectivo" in name:
@@ -93,6 +108,7 @@ def _payment_bucket(payment: SalesPayment) -> str:
 
 
 def _cash_close_summary(db: Session, fecha, bodega_id: int | None = None) -> dict:
+    # Resume ventas, pagos y vales de una fecha. Este resumen alimenta el cierre de caja.
     invoice_query = db.query(SalesInvoice).filter(SalesInvoice.fecha == fecha, SalesInvoice.status != "ANULADA")
     if bodega_id:
         invoice_query = invoice_query.filter(SalesInvoice.bodega_id == bodega_id)
@@ -149,6 +165,7 @@ def _cash_close_summary(db: Session, fecha, bodega_id: int | None = None) -> dic
 
 
 def _cash_detail_total(detail: dict[str, Decimal] | None) -> tuple[dict[str, float], Decimal]:
+    # Calcula el total por denominaciones: billete/moneda multiplicado por cantidad.
     normalized = {}
     total = Decimal("0.00")
     for denom_key, quantity_value in (detail or {}).items():
@@ -164,6 +181,7 @@ def _cash_detail_total(detail: dict[str, Decimal] | None) -> tuple[dict[str, flo
 
 
 def _resolve_venta_tipo(db: Session) -> EgresoTipo:
+    # Asegura que exista el tipo de egreso "Venta" para descontar inventario al facturar.
     tipo = db.query(EgresoTipo).filter(func.lower(func.trim(EgresoTipo.nombre)) == "venta").first()
     if tipo:
         return tipo
@@ -174,12 +192,15 @@ def _resolve_venta_tipo(db: Session) -> EgresoTipo:
 
 
 def _to_currency_pair(amount: Decimal, moneda: str, tasa: Decimal) -> tuple[Decimal, Decimal]:
+    # Convierte un monto a sus dos representaciones: dolares y cordobas.
+    # Ejemplo: si la venta esta en USD, se guarda USD directo y CS usando la tasa.
     if moneda == "USD":
         return _money(amount), _money(amount * tasa)
     return _money(amount / tasa) if tasa > 0 else Decimal("0.00"), _money(amount)
 
 
 def _settings_rate(settings: BusinessSetting | None, payload_rate: Decimal | None, moneda: str) -> Decimal:
+    # Define que tasa usar segun la moneda de la operacion.
     if moneda == "USD":
         return _require_exchange_rate(moneda, payload_rate)
     return payload_rate or Decimal("0")
@@ -192,6 +213,7 @@ def get_next_invoice(db: Session = Depends(get_db)):
 
 @router.get("/customers", response_model=List[CustomerResponse])
 def list_customers(q: str | None = None, include_inactive: bool = False, db: Session = Depends(get_db)):
+    # Lista clientes para busqueda rapida desde ventas y configuraciones.
     query = db.query(Customer)
     if not include_inactive:
         query = query.filter(Customer.activo.is_(True))
@@ -210,6 +232,7 @@ def list_customers(q: str | None = None, include_inactive: bool = False, db: Ses
 
 @router.post("/customers", response_model=CustomerResponse, status_code=status.HTTP_201_CREATED)
 def create_customer(payload: CustomerCreate, db: Session = Depends(get_db)):
+    # Crea un cliente evitando identificaciones repetidas.
     nombre = (payload.nombre or "").strip()
     if not nombre:
         raise HTTPException(status_code=400, detail="Nombre de cliente requerido")
@@ -237,6 +260,7 @@ def create_customer(payload: CustomerCreate, db: Session = Depends(get_db)):
 
 @router.put("/customers/{customer_id}", response_model=CustomerResponse)
 def update_customer(customer_id: int, payload: CustomerUpdate, db: Session = Depends(get_db)):
+    # Actualiza datos del cliente sin obligar a enviar todos los campos.
     customer = db.query(Customer).filter(Customer.id == customer_id).first()
     if not customer:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
@@ -278,6 +302,7 @@ def list_invoices(
     status_filter: str | None = None,
     db: Session = Depends(get_db),
 ):
+    # Consulta facturas con filtros simples. Se usa en utilidades de facturacion.
     query = db.query(SalesInvoice).options(joinedload(SalesInvoice.items), joinedload(SalesInvoice.payments))
     search = (q or "").strip().lower()
     if search:
@@ -303,6 +328,7 @@ def list_invoices(
 
 
 def _invoice_print_payload(invoice: SalesInvoice, db: Session) -> dict:
+    # Prepara la informacion que necesita la interfaz para reimprimir POS o carta.
     settings = _get_business_settings(db)
     currency = (invoice.moneda or "CS").upper()
     return {
@@ -375,6 +401,7 @@ def _invoice_print_payload(invoice: SalesInvoice, db: Session) -> dict:
 
 @router.get("/invoices/{invoice_id}/print")
 def get_invoice_print(invoice_id: int, db: Session = Depends(get_db)):
+    # Devuelve una factura completa para vista previa e impresion.
     invoice = (
         db.query(SalesInvoice)
         .options(
@@ -392,6 +419,8 @@ def get_invoice_print(invoice_id: int, db: Session = Depends(get_db)):
 
 @router.post("/invoices/{invoice_id}/void", response_model=SalesInvoiceResponse)
 def void_invoice(invoice_id: int, payload: dict | None = Body(default=None), db: Session = Depends(get_db)):
+    # Anula una factura y devuelve el inventario por medio de un ingreso automatico.
+    # No se borra la factura porque debe quedar historial para auditoria.
     invoice = (
         db.query(SalesInvoice)
         .options(
@@ -415,6 +444,7 @@ def void_invoice(invoice_id: int, payload: dict | None = Body(default=None), db:
 
     ingreso_tipo = db.query(IngresoTipo).filter(func.lower(IngresoTipo.nombre) == "anulacion de venta").first()
     if not ingreso_tipo:
+        # Si el catalogo no tiene el tipo, se crea para no detener la anulacion.
         ingreso_tipo = IngresoTipo(nombre="Anulacion de Venta", requiere_proveedor=False)
         db.add(ingreso_tipo)
         db.flush()
@@ -436,6 +466,7 @@ def void_invoice(invoice_id: int, payload: dict | None = Body(default=None), db:
 
     egreso_items_by_product = {}
     if invoice.egreso:
+        # Se toman los costos originales del egreso para devolver inventario con el mismo valor.
         for egreso_item in invoice.egreso.items:
             egreso_items_by_product.setdefault(egreso_item.producto_id, egreso_item)
 
@@ -443,6 +474,7 @@ def void_invoice(invoice_id: int, payload: dict | None = Body(default=None), db:
     total_cs = Decimal("0")
     touched_products: set[int] = set()
     for item in invoice.items:
+        # Cada linea vendida se convierte en una linea de ingreso para regresar existencia.
         cantidad = Decimal(str(item.cantidad or 0))
         egreso_item = egreso_items_by_product.get(item.producto_id)
         producto = db.query(Producto).filter(Producto.id == item.producto_id).first()
@@ -475,11 +507,13 @@ def void_invoice(invoice_id: int, payload: dict | None = Body(default=None), db:
     ingreso.total_usd = _money(total_usd)
     ingreso.total_cs = _money(total_cs)
     previous_note = (invoice.observacion or "").strip()
+    # La factura queda marcada como anulada, pero sus montos y lineas se conservan.
     invoice.status = "ANULADA"
     invoice.observacion = f"{previous_note}\nANULADA por {usuario}: {motivo}".strip()
     db.add(invoice)
 
     for product_id in touched_products:
+        # Recalcula saldos globales despues de devolver productos.
         _rebuild_global_saldo(db, product_id)
 
     db.commit()
@@ -493,11 +527,13 @@ def void_invoice(invoice_id: int, payload: dict | None = Body(default=None), db:
 
 @router.get("/cash-close/summary", response_model=CashCloseSummaryResponse)
 def get_cash_close_summary(fecha: date, bodega_id: int | None = None, db: Session = Depends(get_db)):
+    # Endpoint usado por la pantalla de cierre para mostrar lo esperado antes de registrar.
     return _cash_close_summary(db, fecha, bodega_id)
 
 
 @router.get("/cash-close", response_model=List[CashCloseResponse])
 def list_cash_closures(db: Session = Depends(get_db)):
+    # Historial reciente de cierres de caja.
     return (
         db.query(CashClose)
         .options(joinedload(CashClose.movements))
@@ -514,6 +550,7 @@ def list_cash_vouchers(
     bodega_id: int | None = None,
     db: Session = Depends(get_db),
 ):
+    # Lista vales de caja filtrados por fecha y bodega.
     query = db.query(CashVoucher)
     if start_date:
         query = query.filter(CashVoucher.fecha >= start_date)
@@ -526,6 +563,7 @@ def list_cash_vouchers(
 
 @router.post("/cash-vouchers", response_model=CashVoucherResponse, status_code=status.HTTP_201_CREATED)
 def create_cash_voucher(payload: CashVoucherCreate, db: Session = Depends(get_db)):
+    # Registra ingresos o egresos manuales de caja que pueden afectar el cierre diario.
     if payload.bodega_id and not db.query(Bodega).filter(Bodega.id == payload.bodega_id).first():
         raise HTTPException(status_code=404, detail="Bodega no encontrada")
     tipo = (payload.tipo or "").strip().upper()
@@ -541,6 +579,7 @@ def create_cash_voucher(payload: CashVoucherCreate, db: Session = Depends(get_db
         raise HTTPException(status_code=400, detail="El monto debe ser mayor que cero")
     tasa = Decimal(str(payload.tasa_cambio or 0))
     if moneda == "USD" and tasa <= 0:
+        # Para vales en dolares se necesita tasa para calcular su equivalente en cordobas.
         try:
             tasa = _current_exchange_rate_value(db)
         except HTTPException as exc:
@@ -570,6 +609,7 @@ def create_cash_voucher(payload: CashVoucherCreate, db: Session = Depends(get_db
 
 @router.post("/cash-close", response_model=CashCloseResponse, status_code=status.HTTP_201_CREATED)
 def create_cash_close(payload: CashCloseCreate, db: Session = Depends(get_db)):
+    # Crea el cierre del dia comparando efectivo esperado contra efectivo contado.
     if payload.bodega_id and not db.query(Bodega).filter(Bodega.id == payload.bodega_id).first():
         raise HTTPException(status_code=404, detail="Bodega no encontrada")
     exists = db.query(CashClose).filter(CashClose.fecha == payload.fecha, CashClose.bodega_id == payload.bodega_id).first()
@@ -581,6 +621,7 @@ def create_cash_close(payload: CashCloseCreate, db: Session = Depends(get_db)):
     egresos = _money(summary["egresos_caja_cs"])
     normalized_movements = []
     for movement in payload.movements:
+        # Movimientos adicionales digitados en el cierre, como ajustes de caja.
         tipo = (movement.tipo or "").strip().upper()
         if tipo not in {"INGRESO", "EGRESO"}:
             raise HTTPException(status_code=400, detail="Tipo de movimiento invalido")
@@ -600,6 +641,7 @@ def create_cash_close(payload: CashCloseCreate, db: Session = Depends(get_db)):
     detalle_usd, total_efectivo_usd = _cash_detail_total(payload.detalle_usd)
     tasa_cambio = Decimal(str(payload.tasa_cambio or 0))
     if total_efectivo_usd > 0 and tasa_cambio <= 0:
+        # Si se cuenta efectivo en dolares, se convierte para comparar todo en cordobas.
         try:
             tasa_cambio = _current_exchange_rate_value(db)
         except HTTPException as exc:
@@ -612,6 +654,7 @@ def create_cash_close(payload: CashCloseCreate, db: Session = Depends(get_db)):
     efectivo_fisico = efectivo_denominado_cs if detalle_cs or detalle_usd else _money(payload.efectivo_fisico_cs)
     diferencia = _money(efectivo_fisico - efectivo_esperado)
     if diferencia > 0:
+        # Resultado final del cierre segun la diferencia entre esperado y fisico.
         resultado = "SOBRANTE"
     elif diferencia < 0:
         resultado = "FALTANTE"
@@ -666,6 +709,7 @@ def create_cash_close(payload: CashCloseCreate, db: Session = Depends(get_db)):
 
 @router.post("/invoices", response_model=SalesInvoiceResponse, status_code=status.HTTP_201_CREATED)
 def create_invoice(payload: SalesInvoiceCreate, db: Session = Depends(get_db)):
+    # Crea una factura, descuenta inventario y guarda los pagos aplicados.
     settings = _get_business_settings(db)
     if not payload.items:
         raise HTTPException(status_code=400, detail="Debes registrar al menos un item")
@@ -677,6 +721,7 @@ def create_invoice(payload: SalesInvoiceCreate, db: Session = Depends(get_db)):
     moneda = _normalize_currency(payload.moneda)
     tasa = _settings_rate(settings, payload.tasa_cambio, moneda)
     if moneda == "CS" and any((payment.moneda or "").strip().upper() == "USD" for payment in payload.payments) and tasa <= 0:
+        # Si la factura esta en cordobas pero hay pagos en dolares, se necesita tasa.
         raise HTTPException(status_code=400, detail="La tasa de cambio es requerida para pagos en USD")
 
     bodega = db.query(Bodega).filter(Bodega.id == payload.bodega_id).first()
@@ -688,6 +733,7 @@ def create_invoice(payload: SalesInvoiceCreate, db: Session = Depends(get_db)):
     venta_tipo = _resolve_venta_tipo(db)
 
     invoice_number = _next_invoice_number(db)
+    # Toda factura genera un egreso de inventario para dejar trazabilidad del descuento.
     egreso = EgresoInventario(
         tipo_id=venta_tipo.id,
         bodega_id=payload.bodega_id,
@@ -729,6 +775,7 @@ def create_invoice(payload: SalesInvoiceCreate, db: Session = Depends(get_db)):
     requested_by_product: dict[int, Decimal] = {}
 
     for item in payload.items:
+        # Cada producto vendido se valida contra existencia disponible en la bodega.
         product_id = int(item.producto_id)
         cantidad = Decimal(str(item.cantidad or 0))
         precio_unitario = Decimal(str(item.precio_unitario or 0))
@@ -761,6 +808,7 @@ def create_invoice(payload: SalesInvoiceCreate, db: Session = Depends(get_db)):
         egreso_total_usd += egreso_subtotal_usd
         egreso_total_cs += egreso_subtotal_cs
 
+        # Se guarda la linea comercial de factura y tambien la linea de salida de inventario.
         db.add(
             SalesInvoiceItem(
                 invoice_id=invoice.id,
@@ -795,6 +843,7 @@ def create_invoice(payload: SalesInvoiceCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="La venta de contado requiere al menos una forma de pago")
 
     for payment in payload.payments:
+        # Los pagos se guardan separados para poder calcular caja por forma de pago.
         payment_currency = _normalize_currency(payment.moneda)
         amount = Decimal(str(payment.monto or 0))
         if amount <= 0:
@@ -818,6 +867,7 @@ def create_invoice(payload: SalesInvoiceCreate, db: Session = Depends(get_db)):
         )
 
     if condicion == "CONTADO" and paid_cs < _money(totals_cs):
+        # En contado, el pago debe cubrir la factura completa.
         raise HTTPException(status_code=400, detail="El pago no cubre el total de la factura")
 
     balance_cs = max(_money(totals_cs - paid_cs), Decimal("0.00"))
@@ -840,6 +890,7 @@ def create_invoice(payload: SalesInvoiceCreate, db: Session = Depends(get_db)):
     egreso.total_cs = egreso_total_cs
 
     for product_id in product_ids:
+        # Al final se recalculan saldos de productos afectados.
         _rebuild_global_saldo(db, product_id)
 
     db.commit()

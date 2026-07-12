@@ -1,3 +1,13 @@
+"""Modelos de ventas y caja.
+
+Hecho por Carlos.
+Colaboracion academica: Oded Garcia y Carlos Ramirez.
+
+Recordatorio:
+las clases de este archivo son tablas. Las acciones como facturar, anular o
+calcular totales deben vivir en routers o servicios, no dentro del modelo.
+"""
+
 from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func

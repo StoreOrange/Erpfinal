@@ -1,3 +1,9 @@
+<!--
+  Modulo de compras operativas.
+  Hecho por Carlos.
+  Colaboracion academica: Oded Garcia y Carlos Ramirez.
+  Nota: aqui se manejan insumos internos y solicitudes de cotizacion.
+-->
 <template>
   <section class="page-section procurement-page">
     <header class="module-hero">

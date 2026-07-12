@@ -1,311 +1,105 @@
+<!--
+  Dashboard principal.
+  Hecho por Carlos.
+  Colaboracion academica: Oded Garcia y Carlos Ramirez.
+  Nota: esta pantalla debe ser simple, clara y rapida para entrar a modulos.
+-->
 <template>
-  <section class="page-section dashboard-page">
-    <header class="dashboard-revamp-hero enterprise-dashboard-hero">
-      <div class="dashboard-revamp-copy">
-        <span class="dashboard-chip">Sistema empresarial</span>
-        <h1>Panel principal de operacion</h1>
-        <p>
-          Un inicio para entrar rapido a productos, inventario, ventas y
-          administracion, con resumen operativo y estado de implementacion.
-        </p>
-        <div class="dashboard-revamp-actions">
-          <RouterLink to="/app/products" class="hero-link">
-            <Button label="Abrir productos" severity="contrast" />
-          </RouterLink>
-          <RouterLink to="/app/inventory/movements" class="hero-link">
-            <Button label="Abrir inventario" variant="outlined" />
-          </RouterLink>
-        </div>
+  <section class="page-section dashboard-simple-page">
+    <header class="dashboard-simple-header">
+      <div class="dashboard-header-accent"></div>
+      <div>
+        <p class="page-kicker">Inicio</p>
+        <h1 class="page-title">Panel principal</h1>
+        <p class="dashboard-simple-subtitle">Resumen rapido y accesos principales del sistema.</p>
       </div>
-
-      <div class="dashboard-revamp-brief">
-        <div class="dashboard-brief-card">
-          <span>Fecha</span>
-          <strong>{{ todayLabel }}</strong>
-        </div>
-        <div class="dashboard-brief-card">
-          <span>Perfil</span>
-          <strong>{{ currentRole }}</strong>
-        </div>
-        <div class="dashboard-brief-card">
-          <span>Modulo siguiente</span>
-          <strong>Ventas y facturacion</strong>
-        </div>
+      <div class="dashboard-simple-session">
+        <span>{{ todayLabel }}</span>
+        <strong>{{ currentRole }}</strong>
       </div>
     </header>
 
-    <div class="dashboard-kpi-strip enterprise-kpi-strip">
-      <article class="dashboard-kpi-card dashboard-kpi-card-primary enterprise-kpi-card">
-        <Skeleton v-if="loading" width="60%" height="1rem" />
-        <template v-else>
+    <section class="dashboard-simple-kpis">
+      <article class="dashboard-simple-kpi kpi-products">
+        <div class="dashboard-kpi-icon"><i class="bi bi-box-seam"></i></div>
+        <div>
           <span>Productos</span>
-          <strong>{{ totals.products }}</strong>
-          <small>Catalogo maestro cargado</small>
-        </template>
+          <Skeleton v-if="loading" width="4rem" height="1.4rem" />
+          <strong v-else>{{ totals.products }}</strong>
+          <small>Registrados en catalogo</small>
+        </div>
       </article>
-      <article class="dashboard-kpi-card enterprise-kpi-card">
-        <span>Ingresos</span>
-        <strong>{{ totals.ingresos }}</strong>
-        <small>Movimientos de entrada</small>
-        <Tag severity="success" value="Inventario +" rounded />
+      <article class="dashboard-simple-kpi kpi-income">
+        <div class="dashboard-kpi-icon"><i class="bi bi-arrow-down-circle"></i></div>
+        <div>
+          <span>Ingresos</span>
+          <Skeleton v-if="loading" width="4rem" height="1.4rem" />
+          <strong v-else>{{ totals.ingresos }}</strong>
+          <small>Movimientos de entrada</small>
+        </div>
       </article>
-      <article class="dashboard-kpi-card enterprise-kpi-card">
-        <span>Egresos</span>
-        <strong>{{ totals.egresos }}</strong>
-        <small>Movimientos de salida</small>
-        <Tag severity="warn" value="Inventario -" rounded />
+      <article class="dashboard-simple-kpi kpi-outcome">
+        <div class="dashboard-kpi-icon"><i class="bi bi-arrow-up-circle"></i></div>
+        <div>
+          <span>Egresos</span>
+          <Skeleton v-if="loading" width="4rem" height="1.4rem" />
+          <strong v-else>{{ totals.egresos }}</strong>
+          <small>Movimientos de salida</small>
+        </div>
       </article>
-      <article class="dashboard-kpi-card enterprise-kpi-card">
-        <span>Gestion financiera</span>
-        <strong>C$ {{ formatMoney(financialBalance) }}</strong>
-        <ProgressBar :value="implementationProgress" :show-value="false" />
-        <small>Balance operativo estimado</small>
-      </article>
-    </div>
+    </section>
 
-    <div class="enterprise-widget-grid">
-      <Card class="executive-card enterprise-chart-card">
-        <template #title>
-          <div class="dashboard-card-head">
-            <div>
-              <span class="products-section-kicker">Indicadores</span>
-              <h3>Ingresos vs egresos</h3>
-            </div>
-            <Tag severity="info" value="Tiempo real" rounded />
-          </div>
-        </template>
-        <template #content>
-          <VueApexCharts type="area" height="260" :options="movementChartOptions" :series="movementChartSeries" />
-        </template>
-      </Card>
-
-      <Card class="executive-card enterprise-chart-card">
-        <template #title>
-          <div class="dashboard-card-head">
-            <div>
-              <span class="products-section-kicker">Inventario</span>
-              <h3>Distribucion operativa</h3>
-            </div>
-          </div>
-        </template>
-        <template #content>
-          <VueApexCharts type="donut" height="260" :options="inventoryChartOptions" :series="inventoryChartSeries" />
-        </template>
-      </Card>
-
-      <Card class="executive-card enterprise-timeline-card">
-        <template #title>
-          <div class="dashboard-card-head">
-            <div>
-              <span class="products-section-kicker">Actividad</span>
-              <h3>Linea operativa</h3>
-            </div>
-          </div>
-        </template>
-        <template #content>
-          <Timeline :value="timelineItems" class="enterprise-timeline">
-            <template #marker="{ item }">
-              <span class="enterprise-timeline-marker" :class="item.status"></span>
-            </template>
-            <template #content="{ item }">
-              <strong>{{ item.title }}</strong>
-              <p>{{ item.detail }}</p>
-            </template>
-          </Timeline>
-        </template>
-      </Card>
-    </div>
-
-    <div class="dashboard-board enterprise-dashboard-board">
-      <Card class="executive-card dashboard-board-card dashboard-board-main">
-        <template #title>
-          <div class="dashboard-card-head">
-            <div>
-              <span class="products-section-kicker">Navegacion ejecutiva</span>
-              <h3>Aplicaciones</h3>
-            </div>
-          </div>
-        </template>
-        <template #content>
-          <div class="dashboard-module-grid">
-            <RouterLink
-              v-for="item in quickLinks"
-              :key="item.route"
-              :to="item.route"
-              class="dashboard-module-tile"
-            >
-              <div class="dashboard-module-icon">
-                <i class="bi" :class="item.icon"></i>
-              </div>
-              <div class="dashboard-module-copy">
-                <strong>{{ item.label }}</strong>
-                <span>Entrar al modulo</span>
-              </div>
-            </RouterLink>
-          </div>
-        </template>
-      </Card>
-
-      <Card class="executive-card dashboard-board-card">
-        <template #title>
-          <div class="dashboard-card-head">
-            <div>
-              <span class="products-section-kicker">Monitoreo</span>
-              <h3>Estado del sistema</h3>
-            </div>
-          </div>
-        </template>
-        <template #content>
-          <div class="dashboard-status-list">
-            <div class="dashboard-status-row">
-              <span class="module-status-dot ok"></span>
-              <div>
-                <strong>Inventario conectado</strong>
-                <p>Productos y movimientos con backend funcional.</p>
-              </div>
-            </div>
-            <div class="dashboard-status-row">
-              <span class="module-status-dot ok"></span>
-              <div>
-                <strong>UI modular activa</strong>
-                <p>Shell, dashboard y vistas base alineadas.</p>
-              </div>
-            </div>
-            <div class="dashboard-status-row">
-              <span class="module-status-dot ok"></span>
-              <div>
-                <strong>Facturacion POS activa</strong>
-                <p>Ventas, pagos y descuento de inventario conectados.</p>
-              </div>
-            </div>
-          </div>
-        </template>
-      </Card>
-
-      <Card class="executive-card dashboard-board-card">
-        <template #title>
-          <div class="dashboard-card-head">
-            <div>
-              <span class="products-section-kicker">Plan inmediato</span>
-              <h3>Ruta siguiente</h3>
-            </div>
-          </div>
-        </template>
-        <template #content>
-          <ol class="dashboard-roadmap-list">
-            <li>
-              <strong>POS y cobro</strong>
-              <span>Buscador comercial, carrito, pago y cierre de venta.</span>
-            </li>
-            <li>
-              <strong>Inventario operativo</strong>
-              <span>Formularios completos y control de bodega.</span>
-            </li>
-            <li>
-              <strong>Seguridad</strong>
-              <span>Usuarios, roles y permisos por modulo.</span>
-            </li>
-          </ol>
-        </template>
-      </Card>
-
-      <Card class="executive-card dashboard-board-card dashboard-board-wide">
-        <template #title>
-          <div class="dashboard-card-head">
-            <div>
-              <span class="products-section-kicker">Resumen directivo</span>
-              <h3>Panorama general</h3>
-            </div>
-          </div>
-        </template>
-        <template #content>
-          <div class="dashboard-summary-grid">
-            <div class="dashboard-summary-tile">
-              <span>Operacion</span>
-              <strong>Base navegable y funcional</strong>
-              <small>Las aplicaciones principales ya son accesibles desde el shell.</small>
-            </div>
-            <div class="dashboard-summary-tile">
-              <span>Inventario</span>
-              <strong>Modelo espejo en progreso</strong>
-              <small>La logica se sigue portando desde el sistema fuente.</small>
-            </div>
-            <div class="dashboard-summary-tile">
-              <span>Siguiente frente</span>
-              <strong>Ventas estilo Odoo</strong>
-              <small>Facturacion, pagos y flujo completo de caja.</small>
-            </div>
-          </div>
-        </template>
-      </Card>
-    </div>
+    <section class="panel-card dashboard-simple-actions">
+      <div class="dashboard-simple-section-head">
+        <div>
+          <span class="products-section-kicker">Accesos</span>
+          <h2>Modulos principales</h2>
+        </div>
+      </div>
+      <div class="dashboard-simple-links">
+        <RouterLink
+          v-for="item in mainLinks"
+          :key="item.route"
+          :to="item.route"
+          class="dashboard-simple-link"
+          :class="linkClass(item.route)"
+        >
+          <i class="bi" :class="item.icon"></i>
+          <span>{{ item.label }}</span>
+        </RouterLink>
+      </div>
+    </section>
   </section>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref } from "vue";
 import { RouterLink } from "vue-router";
-import Button from "primevue/button";
-import Card from "primevue/card";
-import ProgressBar from "primevue/progressbar";
 import Skeleton from "primevue/skeleton";
-import Tag from "primevue/tag";
-import Timeline from "primevue/timeline";
-import VueApexCharts from "vue3-apexcharts";
 
 import { appNavigation } from "../../data/navigation";
 import { readStoredUser } from "../../services/auth";
 import { fetchEgresos, fetchIngresos, fetchProducts } from "../../services/inventory";
 
-const quickLinks = appNavigation.filter((item) => item.route !== "/app/dashboard");
+const mainRoutes = new Set([
+  "/app/sales",
+  "/app/products",
+  "/app/inventory/movements",
+  "/app/reports",
+  "/app/procurement",
+  "/app/users",
+]);
+const mainLinks = appNavigation.filter((item) => mainRoutes.has(item.route));
 const currentUser = readStoredUser();
-
+const loading = ref(true);
 const totals = reactive({
   products: 0,
   ingresos: 0,
   egresos: 0,
 });
-const loading = ref(true);
-const implementationProgress = 76;
-const financialBalance = computed(() => (totals.ingresos - totals.egresos) * 1250);
-const movementChartSeries = computed(() => [
-  { name: "Ingresos", data: [0, totals.ingresos, Math.max(totals.ingresos + 2, 3), totals.ingresos + totals.products] },
-  { name: "Egresos", data: [0, totals.egresos, Math.max(totals.egresos + 1, 2), totals.egresos + Math.round(totals.products / 3)] },
-]);
-const movementChartOptions = computed(() => ({
-  chart: { toolbar: { show: false }, fontFamily: "inherit", sparkline: { enabled: false } },
-  colors: ["#7557a8", "#d99058"],
-  dataLabels: { enabled: false },
-  stroke: { curve: "smooth", width: 3 },
-  fill: { type: "gradient", gradient: { opacityFrom: 0.24, opacityTo: 0.02 } },
-  grid: { borderColor: "#ede7f3", strokeDashArray: 4 },
-  xaxis: { categories: ["Inicio", "Actual", "Proy.", "Total"], labels: { style: { colors: "#736b7f" } } },
-  yaxis: { labels: { style: { colors: "#736b7f" } } },
-  tooltip: { theme: "light" },
-}));
-const inventoryChartSeries = computed(() => [
-  Math.max(totals.products, 1),
-  Math.max(totals.ingresos, 1),
-  Math.max(totals.egresos, 1),
-]);
-const inventoryChartOptions = computed(() => ({
-  labels: ["Productos", "Ingresos", "Egresos"],
-  chart: { fontFamily: "inherit" },
-  colors: ["#7557a8", "#3d7a5b", "#a8723d"],
-  legend: { position: "bottom", labels: { colors: "#736b7f" } },
-  dataLabels: { enabled: false },
-  stroke: { width: 0 },
-  plotOptions: { pie: { donut: { size: "68%" } } },
-}));
-const timelineItems = computed(() => [
-  { status: "ok", title: "Productos", detail: `${totals.products} registros disponibles para operacion.` },
-  { status: "ok", title: "Inventario", detail: `${totals.ingresos + totals.egresos} movimientos registrados.` },
-  { status: "warn", title: "Finanzas", detail: "Indicadores preparados para caja, bancos y cuentas." },
-]);
 
 const todayLabel = computed(() => {
   return new Intl.DateTimeFormat("es-NI", {
-    weekday: "long",
     day: "2-digit",
     month: "long",
     year: "numeric",
@@ -325,7 +119,6 @@ onMounted(async () => {
       fetchIngresos(),
       fetchEgresos(),
     ]);
-
     totals.products = products.length;
     totals.ingresos = ingresos.length;
     totals.egresos = egresos.length;
@@ -338,10 +131,262 @@ onMounted(async () => {
   }
 });
 
-function formatMoney(value) {
-  return new Intl.NumberFormat("es-NI", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(Number(value || 0));
+function linkClass(route) {
+  const map = {
+    "/app/sales": "link-sales",
+    "/app/products": "link-products",
+    "/app/inventory/movements": "link-inventory",
+    "/app/reports": "link-reports",
+    "/app/procurement": "link-procurement",
+    "/app/users": "link-users",
+  };
+  return map[route] || "";
 }
 </script>
+
+<style scoped>
+.dashboard-simple-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.dashboard-simple-header {
+  align-items: center;
+  background:
+    linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(30, 64, 175, 0.9)),
+    radial-gradient(circle at 82% 20%, rgba(45, 212, 191, 0.25), transparent 28%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  color: #fff;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  overflow: hidden;
+  padding: 1.2rem;
+  position: relative;
+}
+
+.dashboard-header-accent {
+  background: linear-gradient(180deg, #2dd4bf, #f59e0b);
+  border-radius: 999px;
+  bottom: 1rem;
+  left: 0.85rem;
+  position: absolute;
+  top: 1rem;
+  width: 4px;
+}
+
+.dashboard-simple-header > div:not(.dashboard-header-accent) {
+  position: relative;
+  z-index: 1;
+}
+
+.dashboard-simple-header .page-kicker,
+.dashboard-simple-header .page-title,
+.dashboard-simple-header .dashboard-simple-subtitle {
+  color: #fff;
+}
+
+.dashboard-simple-subtitle {
+  opacity: 0.78;
+  margin: 0.35rem 0 0;
+}
+
+.dashboard-simple-session {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 8px;
+  display: grid;
+  gap: 0.2rem;
+  min-width: 190px;
+  padding: 0.75rem 0.9rem;
+  text-align: right;
+}
+
+.dashboard-simple-session span,
+.dashboard-simple-kpi span {
+  color: var(--erp-text-soft);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.dashboard-simple-session strong {
+  color: #fff;
+  font-size: 0.95rem;
+}
+
+.dashboard-simple-kpis {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.dashboard-simple-kpi {
+  align-items: center;
+  background: #fff;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  border-radius: 12px;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: auto 1fr;
+  min-height: 112px;
+  overflow: hidden;
+  padding: 1rem;
+  position: relative;
+}
+
+.dashboard-simple-kpi::before {
+  border-radius: 999px;
+  content: "";
+  height: 82px;
+  opacity: 0.12;
+  position: absolute;
+  right: -22px;
+  top: -28px;
+  width: 82px;
+}
+
+.dashboard-kpi-icon {
+  align-items: center;
+  border-radius: 10px;
+  color: #fff;
+  display: inline-flex;
+  font-size: 1.25rem;
+  height: 2.75rem;
+  justify-content: center;
+  width: 2.75rem;
+}
+
+.kpi-products .dashboard-kpi-icon,
+.kpi-products::before {
+  background: #2563eb;
+}
+
+.kpi-income .dashboard-kpi-icon,
+.kpi-income::before {
+  background: #059669;
+}
+
+.kpi-outcome .dashboard-kpi-icon,
+.kpi-outcome::before {
+  background: #d97706;
+}
+
+.dashboard-simple-kpi strong {
+  color: var(--erp-text);
+  font-size: 1.8rem;
+  line-height: 1.1;
+}
+
+.dashboard-simple-kpi small {
+  color: var(--erp-text-soft);
+}
+
+.dashboard-simple-section-head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.85rem;
+}
+
+.dashboard-simple-section-head h2 {
+  font-size: 1.05rem;
+  margin: 0.15rem 0 0;
+}
+
+.dashboard-simple-actions {
+  background: linear-gradient(180deg, #fff, #f8fafc);
+  border-color: rgba(148, 163, 184, 0.28);
+  border-radius: 12px;
+}
+
+.dashboard-simple-links {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.dashboard-simple-link {
+  align-items: center;
+  background: #fff;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 8px;
+  color: var(--erp-text);
+  display: flex;
+  gap: 0.65rem;
+  min-height: 3.1rem;
+  padding: 0.75rem;
+  text-decoration: none;
+  transition: border-color 0.15s ease, color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dashboard-simple-link:hover {
+  border-color: var(--erp-primary);
+  color: var(--erp-primary);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  transform: translateY(-1px);
+}
+
+.dashboard-simple-link i {
+  align-items: center;
+  background: rgba(15, 23, 42, 0.06);
+  border-radius: 8px;
+  display: inline-flex;
+  flex: 0 0 2rem;
+  height: 2rem;
+  justify-content: center;
+}
+
+.dashboard-simple-link span {
+  font-weight: 800;
+}
+
+.dashboard-simple-link.link-sales i {
+  background: rgba(37, 99, 235, 0.12);
+  color: #2563eb;
+}
+
+.dashboard-simple-link.link-products i {
+  background: rgba(5, 150, 105, 0.12);
+  color: #059669;
+}
+
+.dashboard-simple-link.link-inventory i {
+  background: rgba(217, 119, 6, 0.14);
+  color: #b45309;
+}
+
+.dashboard-simple-link.link-reports i {
+  background: rgba(124, 58, 237, 0.12);
+  color: #7c3aed;
+}
+
+.dashboard-simple-link.link-procurement i {
+  background: rgba(8, 145, 178, 0.12);
+  color: #0891b2;
+}
+
+.dashboard-simple-link.link-users i {
+  background: rgba(225, 29, 72, 0.12);
+  color: #e11d48;
+}
+
+@media (max-width: 900px) {
+  .dashboard-simple-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dashboard-simple-session {
+    text-align: left;
+  }
+
+  .dashboard-simple-kpis,
+  .dashboard-simple-links {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

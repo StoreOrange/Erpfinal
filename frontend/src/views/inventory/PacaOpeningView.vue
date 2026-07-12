@@ -1,3 +1,9 @@
+<!--
+  Pantalla de apertura de pacas.
+  Hecho por Carlos.
+  Colaboracion academica: Oded Garcia y Carlos Ramirez.
+  Nota: este modulo transforma una paca en productos clasificados.
+-->
 <template>
   <section class="page-section paca-page">
     <header class="module-hero">

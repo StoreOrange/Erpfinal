@@ -1,6 +1,9 @@
+// Lista simple de accesos usados por el dashboard y otras partes visuales.
+// Si se agrega un modulo nuevo, conviene registrarlo aqui para mantener
+// la navegacion del sistema en un solo lugar.
 export const appNavigation = [
   {
-    label: "Dashboard",
+    label: "Inicio",
     icon: "bi-speedometer2",
     route: "/app/dashboard",
   },

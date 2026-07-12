@@ -1,3 +1,12 @@
+"""Router de autenticacion.
+
+Hecho por Carlos.
+Colaboracion academica: Oded Garcia y Carlos Ramirez.
+
+Aqui se valida el inicio de sesion y se entrega el token JWT. Mantener este
+archivo simple ayuda a revisar la seguridad del sistema.
+"""
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt

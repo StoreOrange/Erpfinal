@@ -17,7 +17,10 @@ from .models.settings import BusinessSetting, CompanyEnvironment, ExchangeRate
 from .models.user import Branch, Permission, Role, User, UserAccessProfile, Vendor
 from .routers import access, auth, inventory, procurement, reports, sales, settings
 
-app = FastAPI(title="Sistema de planificacion de recursos empresariales Backend")
+# Archivo principal del backend.
+# Aqui se crea la aplicacion FastAPI, se registran los routers y se preparan
+# tablas/catalogos iniciales para que el sistema pueda arrancar completo.
+app = FastAPI(title="Servidor del sistema de planificacion de recursos empresariales")
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 UPLOADS_DIR = BACKEND_DIR / "uploads"
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)

@@ -1,3 +1,12 @@
+"""Router de compras operativas.
+
+Hecho por Carlos.
+Colaboracion academica: Oded Garcia y Carlos Ramirez.
+
+Este modulo maneja insumos internos, movimientos, solicitudes de cotizacion y
+envios por correo. No mezclar con compras de mercaderia para venta.
+"""
+
 from datetime import date
 from decimal import Decimal
 

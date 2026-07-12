@@ -1,3 +1,9 @@
+<!--
+  Modulo de informes.
+  Hecho por Carlos.
+  Colaboracion academica: Oded Garcia y Carlos Ramirez.
+  Recordatorio: los informes deben consultar datos, no modificar operaciones.
+-->
 <template>
   <section class="page-section reports-page">
     <header class="module-hero reports-hero">

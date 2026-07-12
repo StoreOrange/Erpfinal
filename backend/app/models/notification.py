@@ -1,3 +1,13 @@
+"""Modelos de notificaciones.
+
+Hecho por Carlos.
+Colaboracion academica: Oded Garcia y Carlos Ramirez.
+
+Nota sencilla:
+estas tablas guardan configuracion de correo y destinatarios. La logica de
+envio se mantiene separada para que el modelo sea facil de leer.
+"""
+
 from sqlalchemy import Boolean, Column, DateTime, Integer, String
 from sqlalchemy.sql import func
 

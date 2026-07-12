@@ -1,53 +1,100 @@
-# Sistema de planificacion de recursos empresariales
+# Sistema ERP para gestion empresarial
 
-## Desarrollo con Docker
+Este proyecto es un sistema ERP desarrollado como aplicacion web. La idea
+principal es centralizar procesos de inventario, ventas, compras, usuarios,
+permisos e informes en una sola plataforma.
 
-El entorno incluye PostgreSQL, el backend FastAPI y el frontend Vue/Vite. Los
-cambios del codigo fuente se reflejan automaticamente durante el desarrollo.
-El backend aplica las migraciones pendientes de Alembic antes de iniciar.
+El codigo esta separado en dos partes principales:
 
-### Requisitos
+- `backend`: API, base de datos, modelos y reglas del sistema.
+- `frontend`: pantallas, formularios y navegacion del usuario.
 
-- Docker Desktop con Docker Compose
+## Objetivo del proyecto
 
-### Iniciar el proyecto
+Construir una solucion sencilla pero completa para administrar operaciones de
+una empresa. El sistema busca que el usuario pueda:
+
+- Registrar productos e inventario.
+- Realizar ventas y facturacion.
+- Gestionar usuarios, roles y permisos.
+- Consultar informes para la toma de decisiones.
+- Registrar compras operativas y solicitudes de cotizacion.
+
+## Tecnologias usadas
+
+- Python con FastAPI para el backend.
+- Vue 3 con Vite para el frontend.
+- PostgreSQL como base de datos.
+- Docker Compose para levantar el entorno completo.
+
+## Estructura rapida
+
+```text
+ERP_System/
+├── backend/      Codigo del servidor y base de datos
+├── frontend/     Codigo de la interfaz web
+├── deploy/       Scripts para VPS y despliegue
+├── docs/         Documentacion del proyecto
+├── compose.yaml  Servicios Docker
+└── README.md     Guia principal del proyecto
+```
+
+## Iniciar en desarrollo
+
+Requisito principal:
+
+- Docker Desktop con Docker Compose.
+
+Comando para levantar el sistema:
 
 ```powershell
 docker compose up --build
 ```
 
-Servicios disponibles:
+Servicios locales:
 
-- Frontend: http://127.0.0.1:5310
-- Backend: http://127.0.0.1:8001
-- Documentacion API: http://127.0.0.1:8001/docs
+- Interfaz web: http://127.0.0.1:5310
+- Servidor/API: http://127.0.0.1:8011
+- Documentacion API: http://127.0.0.1:8011/docs
 - PostgreSQL: `127.0.0.1:5433`
 
-Para ejecutar los servicios en segundo plano:
+## Comandos utiles
 
 ```powershell
+# Levantar servicios en segundo plano
 docker compose up --build -d
+
+# Ver logs
 docker compose logs -f
-```
 
-### Comandos utiles
+# Reiniciar solo frontend
+docker compose restart frontend
 
-```powershell
-# Detener los contenedores conservando los datos
+# Reiniciar solo backend
+docker compose restart backend
+
+# Detener contenedores sin borrar datos
 docker compose down
 
-# Aplicar manualmente las migraciones pendientes
-docker compose exec backend alembic upgrade head
-
-# Reiniciar completamente la base de datos local
+# Reiniciar base de datos local desde cero
 docker compose down -v
 docker compose up --build
 ```
 
-Los datos de PostgreSQL se conservan en el volumen `postgres_data`. Para cambiar
-credenciales o puertos, copia `.env.example` como `.env` y ajusta sus valores.
-Configura tambien `JWT_SECRET_KEY` con un valor privado. La duracion de sesion
-se controla con `JWT_ACCESS_TOKEN_EXPIRE_MINUTES`; el valor local predeterminado
-es `480` minutos (8 horas).
+## Documentos recomendados
 
-El script `run_dev.ps1` sigue disponible para desarrollo local sin Docker.
+- [Estructura del proyecto](docs/ESTRUCTURA_PROYECTO.md)
+- [Guia para leer el codigo](docs/GUIA_LECTURA_CODIGO.md)
+- [Convenciones simples](docs/CONVENCIONES_CODIGO.md)
+- [Creditos y notas](docs/CREDITOS_Y_NOTAS.md)
+- [Bitacora](docs/BITACORA.md)
+
+## Nota de seguridad
+
+Antes de usar el sistema en produccion se deben cambiar las variables sensibles
+del archivo `.env`, especialmente:
+
+- `JWT_SECRET_KEY`
+- `POSTGRES_PASSWORD`
+
+El archivo `.env.example` sirve como plantilla.

@@ -1,3 +1,13 @@
+"""Modelos de usuarios, roles y permisos.
+
+Hecho por Carlos.
+Colaboracion academica: Oded Garcia y Carlos Ramirez.
+
+Regla importante:
+el administrador debe conservar acceso completo. Cada modulo nuevo debe agregar
+sus permisos para mantener el sistema ordenado y defendible.
+"""
+
 from sqlalchemy import Column, DateTime, Integer, String, Boolean, ForeignKey, Table, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func

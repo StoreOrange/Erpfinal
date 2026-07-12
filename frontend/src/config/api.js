@@ -1,6 +1,9 @@
 export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "";
 
+// Funcion central para llamar al backend.
+// Todas las pantallas usan esta ayuda para enviar el token, manejar errores
+// y mantener las peticiones ordenadas en un solo lugar.
 export async function apiRequest(path, options = {}) {
   const token = localStorage.getItem("token");
   const isFormData = options.body instanceof FormData;

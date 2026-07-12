@@ -1,3 +1,12 @@
+"""Router de informes.
+
+Hecho por Carlos.
+Colaboracion academica: Oded Garcia y Carlos Ramirez.
+
+Los endpoints de este archivo son para consulta y analisis. Evitar modificar
+datos desde reportes para que sean seguros y faciles de auditar.
+"""
+
 from datetime import date, timedelta
 from decimal import Decimal
 

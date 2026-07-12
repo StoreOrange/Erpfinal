@@ -1,3 +1,12 @@
+"""Modelos de compras operativas.
+
+Hecho por Carlos.
+Colaboracion academica: Oded Garcia y Carlos Ramirez.
+
+Este archivo guarda las entidades usadas para insumos, movimientos internos,
+solicitudes de cotizacion y cotizaciones de proveedor.
+"""
+
 from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func

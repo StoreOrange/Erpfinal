@@ -1,3 +1,12 @@
+"""Router de inventario.
+
+Hecho por Carlos.
+Colaboracion academica: Oded Garcia y Carlos Ramirez.
+
+Contiene operaciones de productos, ingresos, egresos, saldos, produccion y
+apertura de pacas. Revisar con cuidado antes de tocar calculos de existencia.
+"""
+
 from datetime import date
 from decimal import Decimal
 import re

@@ -1,3 +1,9 @@
+<!--
+  Cierre de caja diario.
+  Hecho por Carlos.
+  Colaboracion academica: Oded Garcia y Carlos Ramirez.
+  Nota: esta pantalla resume ventas, efectivo y diferencias de caja.
+-->
 <template>
   <section class="page-section cash-close-page">
     <div v-if="alert.message" class="settings-feedback" :class="alert.type === 'success' ? 'settings-feedback-success' : 'settings-feedback-error'">

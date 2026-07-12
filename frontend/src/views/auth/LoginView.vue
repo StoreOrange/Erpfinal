@@ -1,3 +1,9 @@
+<!--
+  Pantalla de inicio de sesion.
+  Hecho por Carlos.
+  Colaboracion academica: Oded Garcia y Carlos Ramirez.
+  Recordatorio: no dejar credenciales escritas por defecto por seguridad.
+-->
 <template>
   <div class="auth-page">
     <div class="auth-ambient auth-ambient-one"></div>

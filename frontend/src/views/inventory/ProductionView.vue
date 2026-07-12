@@ -1,3 +1,9 @@
+<!--
+  Pantalla de produccion.
+  Hecho por Carlos.
+  Colaboracion academica: Oded Garcia y Carlos Ramirez.
+  Nota: mantener clara la diferencia entre insumos y producto final.
+-->
 <template>
   <section class="page-section production-page">
     <header class="module-hero">

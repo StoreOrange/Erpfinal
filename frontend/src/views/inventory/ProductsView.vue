@@ -1,3 +1,9 @@
+<!--
+  Catalogo de productos.
+  Hecho por Carlos.
+  Colaboracion academica: Oded Garcia y Carlos Ramirez.
+  Recordatorio: este catalogo alimenta inventario, ventas e informes.
+-->
 <template>
   <section class="page-section products-page">
     <header class="products-header">

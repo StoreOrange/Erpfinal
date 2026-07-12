@@ -1,3 +1,9 @@
+<!--
+  Utilidades de facturacion.
+  Hecho por Carlos.
+  Colaboracion academica: Oded Garcia y Carlos Ramirez.
+  Nota: permite reimprimir y anular facturas segun permisos del usuario.
+-->
 <template>
   <section class="page-section sales-utilities-page">
     <header class="sales-utilities-header panel-card">
