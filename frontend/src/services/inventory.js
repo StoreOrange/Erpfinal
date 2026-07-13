@@ -89,6 +89,20 @@ export function updateProveedor(proveedorId, payload) {
   });
 }
 
+export function createBodega(payload) {
+  return apiRequest("/inventory/bodegas", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateBodega(bodegaId, payload) {
+  return apiRequest(`/inventory/bodegas/${bodegaId}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function createLinea(payload) {
   return apiRequest("/inventory/lineas", {
     method: "POST",

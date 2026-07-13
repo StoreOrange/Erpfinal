@@ -42,9 +42,11 @@ from ..models.inventory import (
     UnidadMedida,
 )
 from ..models.settings import BusinessSetting, ExchangeRate
+from ..models.user import Branch
 from ..schemas.inventory import (
     BodegaCreate,
     BodegaResponse,
+    BodegaUpdate,
     EgresoCreate,
     EgresoResponse,
     EgresoTipoCreate,
@@ -509,10 +511,49 @@ def update_unidad_medida(unidad_id: int, payload: UnidadMedidaUpdate, db: Sessio
 
 @router.post("/bodegas", response_model=BodegaResponse, status_code=status.HTTP_201_CREATED)
 def create_bodega(payload: BodegaCreate, db: Session = Depends(get_db)):
-    exists = db.query(Bodega).filter(Bodega.code == payload.code).first()
+    code = _normalize_text(payload.code, "Codigo de bodega").upper()
+    if payload.sucursal_id and not db.query(Branch).filter(Branch.id == payload.sucursal_id).first():
+        raise HTTPException(status_code=404, detail="Sucursal no encontrada")
+    exists = db.query(Bodega).filter(func.lower(Bodega.code) == code.lower()).first()
     if exists:
         raise HTTPException(status_code=400, detail="Codigo de bodega ya existe")
-    bodega = Bodega(**payload.model_dump())
+    data = payload.model_dump()
+    data["code"] = code
+    data["name"] = _normalize_text(payload.name, "Nombre de bodega")
+    data["invoice_series"] = (payload.invoice_series or "").strip().upper() or None
+    data["invoice_sequence"] = max(int(payload.invoice_sequence or 0), 0)
+    bodega = Bodega(**data)
+    db.add(bodega)
+    db.commit()
+    db.refresh(bodega)
+    return bodega
+
+
+@router.put("/bodegas/{bodega_id}", response_model=BodegaResponse)
+def update_bodega(bodega_id: int, payload: BodegaUpdate, db: Session = Depends(get_db)):
+    bodega = db.query(Bodega).filter(Bodega.id == bodega_id).first()
+    if not bodega:
+        raise HTTPException(status_code=404, detail="Bodega no encontrada")
+    data = payload.model_dump(exclude_unset=True)
+    if data.get("code") is not None:
+        code = _normalize_text(data["code"], "Codigo de bodega").upper()
+        exists = db.query(Bodega).filter(func.lower(Bodega.code) == code.lower(), Bodega.id != bodega.id).first()
+        if exists:
+            raise HTTPException(status_code=400, detail="Codigo de bodega ya existe")
+        bodega.code = code
+    if data.get("name") is not None:
+        bodega.name = _normalize_text(data["name"], "Nombre de bodega")
+    if "sucursal_id" in data:
+        if data["sucursal_id"] and not db.query(Branch).filter(Branch.id == data["sucursal_id"]).first():
+            raise HTTPException(status_code=404, detail="Sucursal no encontrada")
+        bodega.sucursal_id = data["sucursal_id"]
+    for field in ["can_invoice", "manages_inventory", "supplies_only", "activo"]:
+        if field in data:
+            setattr(bodega, field, bool(data[field]))
+    if "invoice_series" in data:
+        bodega.invoice_series = (data["invoice_series"] or "").strip().upper() or None
+    if "invoice_sequence" in data:
+        bodega.invoice_sequence = max(int(data["invoice_sequence"] or 0), 0)
     db.add(bodega)
     db.commit()
     db.refresh(bodega)

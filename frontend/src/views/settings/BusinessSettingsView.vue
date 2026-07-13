@@ -284,6 +284,90 @@
           </div>
         </article>
 
+        <article v-else-if="currentSection === 'warehouses'" class="panel-card">
+          <div class="panel-head">
+            <div>
+              <span class="products-section-kicker">Bodegas y politicas</span>
+              <h3>Catalogo operativo de bodegas</h3>
+              <p class="panel-text">
+                Define si una bodega factura, gestiona inventario, es solo de insumos y a que sucursal pertenece.
+              </p>
+            </div>
+            <Tag severity="info" :value="`${bodegas.length} bodegas`" />
+          </div>
+
+          <div class="third-party-layout">
+            <form class="settings-env-form" @submit.prevent="submitBodega">
+              <div class="product-form-grid">
+                <label class="field-group">
+                  <span>Codigo</span>
+                  <input v-model.trim="bodegaForm.code" class="form-control" placeholder="BOD-001" required @input="bodegaForm.code = toUpperValue(bodegaForm.code)" />
+                </label>
+                <label class="field-group field-span-2">
+                  <span>Nombre de bodega</span>
+                  <input v-model.trim="bodegaForm.name" class="form-control" placeholder="Bodega principal" required />
+                </label>
+                <label class="field-group">
+                  <span>Sucursal</span>
+                  <select v-model="bodegaForm.sucursal_id" class="form-control">
+                    <option :value="null">Sin sucursal</option>
+                    <option v-for="branch in branches" :key="branch.id" :value="branch.id">{{ branch.name }}</option>
+                  </select>
+                </label>
+                <label class="field-group">
+                  <span>Serie de facturacion</span>
+                  <input v-model.trim="bodegaForm.invoice_series" class="form-control" placeholder="A001" @input="bodegaForm.invoice_series = toUpperValue(bodegaForm.invoice_series)" />
+                </label>
+                <label class="field-group">
+                  <span>Consecutivo actual</span>
+                  <input v-model.number="bodegaForm.invoice_sequence" class="form-control" type="number" min="0" step="1" />
+                </label>
+                <label class="products-checkbox">
+                  <input v-model="bodegaForm.can_invoice" type="checkbox" />
+                  <span>Puede facturar</span>
+                </label>
+                <label class="products-checkbox">
+                  <input v-model="bodegaForm.manages_inventory" type="checkbox" />
+                  <span>Gestiona inventario</span>
+                </label>
+                <label class="products-checkbox">
+                  <input v-model="bodegaForm.supplies_only" type="checkbox" />
+                  <span>Solo insumos</span>
+                </label>
+                <label class="products-checkbox">
+                  <input v-model="bodegaForm.activo" type="checkbox" />
+                  <span>Activa</span>
+                </label>
+              </div>
+              <div class="product-form-actions">
+                <Button type="button" severity="secondary" variant="outlined" @click="resetBodegaForm">Limpiar</Button>
+                <Button :disabled="warehouseLoading" type="submit">
+                  {{ bodegaForm.id ? "Actualizar bodega" : "Crear bodega" }}
+                </Button>
+              </div>
+            </form>
+
+            <div class="third-party-list">
+              <article v-for="bodega in bodegas" :key="bodega.id" class="third-party-card">
+                <div>
+                  <strong>{{ bodega.name }}</strong>
+                  <span>
+                    {{ bodega.code }} · {{ branchName(bodega.sucursal_id) }} · Serie {{ bodega.invoice_series || "Sin serie" }}
+                  </span>
+                </div>
+                <div class="third-party-actions">
+                  <Tag :severity="bodega.activo ? 'success' : 'contrast'" :value="bodega.activo ? 'Activa' : 'Inactiva'" />
+                  <Tag :severity="bodega.can_invoice ? 'info' : 'contrast'" :value="bodega.can_invoice ? 'Factura' : 'No factura'" />
+                  <Tag :severity="bodega.manages_inventory ? 'success' : 'warn'" :value="bodega.manages_inventory ? 'Inventario' : 'Sin inventario'" />
+                  <Tag v-if="bodega.supplies_only" severity="warn" value="Solo insumos" />
+                  <Button size="small" severity="secondary" variant="outlined" label="Editar" @click="editBodega(bodega)" />
+                </div>
+              </article>
+              <div v-if="!bodegas.length" class="empty-state">No hay bodegas registradas.</div>
+            </div>
+          </div>
+        </article>
+
         <article v-else-if="currentSection === 'exchange-rates'" class="panel-card">
           <div class="panel-head">
             <div>
@@ -786,10 +870,12 @@ import Tag from "primevue/tag";
 
 import { createVendor, fetchAccessUsers, fetchBranches, fetchVendors, updateVendor } from "../../services/access";
 import {
+  createBodega,
   createLinea,
   createMarca,
   createProveedor,
   fetchInventoryCatalogs,
+  updateBodega,
   updateLinea,
   updateMarca,
   updateProveedor,
@@ -826,6 +912,12 @@ const sections = [
     label: "Entorno empresarial",
     caption: "Multiempresa y base de datos activa",
     icon: "bi-buildings",
+  },
+  {
+    key: "warehouses",
+    label: "Bodegas",
+    caption: "Sucursales, facturacion e inventario",
+    icon: "bi-box-seam",
   },
   {
     key: "exchange-rates",
@@ -907,6 +999,7 @@ const environmentLoading = ref(false);
 const exchangeRateLoading = ref(false);
 const thirdPartyLoading = ref(false);
 const catalogLoading = ref(false);
+const warehouseLoading = ref(false);
 const error = ref("");
 const success = ref("");
 const environments = ref([]);
@@ -977,6 +1070,7 @@ const vendorForm = reactive(getEmptyVendorForm());
 const providerForm = reactive(getEmptyProviderForm());
 const lineaForm = reactive(getEmptyLineaForm());
 const marcaForm = reactive(getEmptyMarcaForm());
+const bodegaForm = reactive(getEmptyBodegaForm());
 
 const enabledPolicies = computed(
   () =>
@@ -1093,6 +1187,21 @@ function getEmptyMarcaForm() {
   return { id: null, nombre: "", activo: true };
 }
 
+function getEmptyBodegaForm() {
+  return {
+    id: null,
+    code: nextBodegaCode(),
+    name: "",
+    sucursal_id: null,
+    can_invoice: true,
+    manages_inventory: true,
+    supplies_only: false,
+    invoice_series: "",
+    invoice_sequence: 0,
+    activo: true,
+  };
+}
+
 function toUpperValue(value) {
   return (value || "").toString().toUpperCase();
 }
@@ -1100,6 +1209,10 @@ function toUpperValue(value) {
 function nextVendorCode() {
   if (!vendors.value.length) return "VEN-PISO";
   return `VEN-${String(vendors.value.length + 1).padStart(3, "0")}`;
+}
+
+function nextBodegaCode() {
+  return `BOD-${String(bodegas.value.length + 1).padStart(3, "0")}`;
 }
 
 function normalizeNullableId(value) {
@@ -1126,6 +1239,10 @@ function resetLineaForm() {
 
 function resetMarcaForm() {
   Object.assign(marcaForm, getEmptyMarcaForm());
+}
+
+function resetBodegaForm() {
+  Object.assign(bodegaForm, getEmptyBodegaForm());
 }
 
 function editCustomer(customer) {
@@ -1167,6 +1284,25 @@ function editMarca(marca) {
   activeCatalogTab.value = "marcas";
 }
 
+function editBodega(bodega) {
+  Object.assign(bodegaForm, getEmptyBodegaForm(), {
+    ...bodega,
+    sucursal_id: bodega.sucursal_id ?? null,
+    invoice_series: bodega.invoice_series || "",
+    invoice_sequence: Number(bodega.invoice_sequence || 0),
+    can_invoice: bodega.can_invoice !== false,
+    manages_inventory: bodega.manages_inventory !== false,
+    supplies_only: Boolean(bodega.supplies_only),
+    activo: bodega.activo !== false,
+  });
+  currentSection.value = "warehouses";
+}
+
+function branchName(branchId) {
+  const branch = branches.value.find((item) => Number(item.id) === Number(branchId));
+  return branch?.name || "Sin sucursal";
+}
+
 async function loadThirdParties() {
   try {
     const [customerData, vendorData, userData, branchData, catalogData] = await Promise.all([
@@ -1187,8 +1323,52 @@ async function loadThirdParties() {
     if (!vendorForm.id && !vendorForm.code) {
       resetVendorForm();
     }
+    if (!bodegaForm.id && !bodegaForm.code) {
+      resetBodegaForm();
+    }
   } catch (err) {
     error.value = err.message || "No se pudieron cargar los catalogos de terceros";
+  }
+}
+
+async function loadBodegas() {
+  try {
+    const catalogData = await fetchInventoryCatalogs();
+    bodegas.value = Array.isArray(catalogData?.bodegas) ? catalogData.bodegas : [];
+  } catch (err) {
+    error.value = err.message || "No se pudieron cargar las bodegas";
+  }
+}
+
+async function submitBodega() {
+  warehouseLoading.value = true;
+  error.value = "";
+  success.value = "";
+  try {
+    const payload = {
+      code: bodegaForm.code,
+      name: bodegaForm.name,
+      sucursal_id: normalizeNullableId(bodegaForm.sucursal_id),
+      can_invoice: Boolean(bodegaForm.can_invoice),
+      manages_inventory: Boolean(bodegaForm.manages_inventory),
+      supplies_only: Boolean(bodegaForm.supplies_only),
+      invoice_series: bodegaForm.invoice_series || null,
+      invoice_sequence: Number(bodegaForm.invoice_sequence || 0),
+      activo: Boolean(bodegaForm.activo),
+    };
+    if (bodegaForm.id) {
+      await updateBodega(bodegaForm.id, payload);
+      success.value = "Bodega actualizada.";
+    } else {
+      await createBodega(payload);
+      success.value = "Bodega creada.";
+    }
+    await loadBodegas();
+    resetBodegaForm();
+  } catch (err) {
+    error.value = err.message || "No se pudo guardar la bodega";
+  } finally {
+    warehouseLoading.value = false;
   }
 }
 

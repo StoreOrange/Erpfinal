@@ -1,6 +1,7 @@
 from .inventory import (
     BodegaCreate,
     BodegaResponse,
+    BodegaUpdate,
     EgresoCreate,
     EgresoResponse,
     EgresoTipoCreate,

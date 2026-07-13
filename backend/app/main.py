@@ -11,7 +11,7 @@ from .core.security import hash_password
 from .database import Base, SessionLocal, engine
 from .models.inventory import Bodega, EgresoTipo, IngresoTipo, Linea, Marca, Producto, ProductoCombo, Proveedor, Segmento, UnidadMedida
 from .models.notification import EmailConfig, NotificationRecipient
-from .models.procurement import QuoteRequest, QuoteRequestLine, SupplierQuote, SupplyItem, SupplyMovement
+from .models.procurement import QuoteRequest, QuoteRequestLine, SupplierQuote, SupplyCategory, SupplyItem, SupplyMovement, SupplyUnit
 from .models.sales import CashVoucher, Customer, SalesInvoice, SalesInvoiceItem, SalesPayment, SalesSequence
 from .models.settings import BusinessSetting, CompanyEnvironment, ExchangeRate
 from .models.user import Branch, Permission, Role, User, UserAccessProfile, Vendor
@@ -268,6 +268,14 @@ def seed_inventory_catalogs():
                     """
                 )
             )
+            for ddl in [
+                "ALTER TABLE bodegas ADD COLUMN IF NOT EXISTS can_invoice BOOLEAN DEFAULT TRUE",
+                "ALTER TABLE bodegas ADD COLUMN IF NOT EXISTS manages_inventory BOOLEAN DEFAULT TRUE",
+                "ALTER TABLE bodegas ADD COLUMN IF NOT EXISTS supplies_only BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE bodegas ADD COLUMN IF NOT EXISTS invoice_series VARCHAR(20)",
+                "ALTER TABLE bodegas ADD COLUMN IF NOT EXISTS invoice_sequence INTEGER DEFAULT 0",
+            ]:
+                connection.execute(text(ddl))
             connection.execute(
                 text(
                     """

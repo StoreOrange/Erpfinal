@@ -5,6 +5,57 @@ from typing import List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class SupplyCategoryBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    active: bool = True
+
+
+class SupplyCategoryCreate(SupplyCategoryBase):
+    pass
+
+
+class SupplyCategoryUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    active: Optional[bool] = None
+
+
+class SupplyCategoryResponse(SupplyCategoryBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: Optional[datetime] = None
+
+
+class SupplyUnitBase(BaseModel):
+    name: str
+    abbreviation: Optional[str] = None
+    active: bool = True
+
+
+class SupplyUnitCreate(SupplyUnitBase):
+    pass
+
+
+class SupplyUnitUpdate(BaseModel):
+    name: Optional[str] = None
+    abbreviation: Optional[str] = None
+    active: Optional[bool] = None
+
+
+class SupplyUnitResponse(SupplyUnitBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: Optional[datetime] = None
+
+
+class SupplyCatalogsResponse(BaseModel):
+    categories: List[SupplyCategoryResponse]
+    units: List[SupplyUnitResponse]
+
+
 class SupplyItemBase(BaseModel):
     code: Optional[str] = None
     name: str

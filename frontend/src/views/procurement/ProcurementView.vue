@@ -195,6 +195,95 @@
       </DataTable>
     </section>
 
+    <section v-else-if="activeTab === 'catalogs'" class="panel-card">
+      <div class="panel-head">
+        <div>
+          <span class="products-section-kicker">Catalogos de insumos</span>
+          <h3>Categorias y unidades de medida</h3>
+          <p class="panel-text">
+            Define listas ordenadas para clasificar insumos y evitar escribir categorias o unidades manualmente.
+          </p>
+        </div>
+        <Tag severity="info" :value="`${supplyCategories.length + supplyUnits.length} registros`" />
+      </div>
+
+      <div class="procurement-catalog-grid">
+        <form class="email-card" @submit.prevent="submitSupplyCategory">
+          <h4>{{ categoryForm.id ? "Editar categoria" : "Nueva categoria" }}</h4>
+          <label class="field-group">
+            <span>Categoria</span>
+            <InputText v-model.trim="categoryForm.name" placeholder="Limpieza" required />
+          </label>
+          <label class="field-group">
+            <span>Descripcion</span>
+            <InputText v-model.trim="categoryForm.description" placeholder="Insumos de aseo y desinfeccion" />
+          </label>
+          <label class="products-checkbox">
+            <input v-model="categoryForm.active" type="checkbox" />
+            <span>Activa</span>
+          </label>
+          <div class="table-actions">
+            <Button type="button" severity="secondary" variant="outlined" label="Limpiar" @click="resetCategoryForm" />
+            <Button :loading="saving" type="submit" :label="categoryForm.id ? 'Actualizar categoria' : 'Crear categoria'" />
+          </div>
+        </form>
+
+        <div class="email-card">
+          <h4>Categorias registradas</h4>
+          <div class="procurement-catalog-list">
+            <article v-for="category in supplyCategories" :key="category.id" class="procurement-catalog-card">
+              <div>
+                <strong>{{ category.name }}</strong>
+                <span>{{ category.description || "Sin descripcion" }}</span>
+              </div>
+              <div class="table-actions">
+                <Tag :severity="category.active ? 'success' : 'contrast'" :value="category.active ? 'Activa' : 'Inactiva'" />
+                <Button size="small" severity="secondary" variant="outlined" label="Editar" @click="editCategory(category)" />
+              </div>
+            </article>
+            <div v-if="!supplyCategories.length" class="empty-state">No hay categorias registradas.</div>
+          </div>
+        </div>
+
+        <form class="email-card" @submit.prevent="submitSupplyUnit">
+          <h4>{{ unitForm.id ? "Editar unidad" : "Nueva unidad" }}</h4>
+          <label class="field-group">
+            <span>Unidad de medida</span>
+            <InputText v-model.trim="unitForm.name" placeholder="Unidad" required />
+          </label>
+          <label class="field-group">
+            <span>Abreviatura</span>
+            <InputText v-model.trim="unitForm.abbreviation" placeholder="UND" />
+          </label>
+          <label class="products-checkbox">
+            <input v-model="unitForm.active" type="checkbox" />
+            <span>Activa</span>
+          </label>
+          <div class="table-actions">
+            <Button type="button" severity="secondary" variant="outlined" label="Limpiar" @click="resetUnitForm" />
+            <Button :loading="saving" type="submit" :label="unitForm.id ? 'Actualizar unidad' : 'Crear unidad'" />
+          </div>
+        </form>
+
+        <div class="email-card">
+          <h4>Unidades registradas</h4>
+          <div class="procurement-catalog-list">
+            <article v-for="unit in supplyUnits" :key="unit.id" class="procurement-catalog-card">
+              <div>
+                <strong>{{ unit.name }}</strong>
+                <span>{{ unit.abbreviation || "Sin abreviatura" }}</span>
+              </div>
+              <div class="table-actions">
+                <Tag :severity="unit.active ? 'success' : 'contrast'" :value="unit.active ? 'Activa' : 'Inactiva'" />
+                <Button size="small" severity="secondary" variant="outlined" label="Editar" @click="editUnit(unit)" />
+              </div>
+            </article>
+            <div v-if="!supplyUnits.length" class="empty-state">No hay unidades registradas.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <Dialog v-model:visible="supplyDialog" modal :header="supplyForm.id ? 'Editar insumo' : 'Nuevo insumo'" :style="{ width: 'min(760px, 94vw)' }">
       <form class="procurement-form-grid" @submit.prevent="submitSupply">
         <label class="field-group">
@@ -207,11 +296,27 @@
         </label>
         <label class="field-group">
           <span>Categoria</span>
-          <InputText v-model.trim="supplyForm.category" placeholder="Limpieza" />
+          <Select
+            v-model="supplyForm.category"
+            :options="activeSupplyCategories"
+            option-label="name"
+            option-value="name"
+            editable
+            filter
+            placeholder="Limpieza"
+          />
         </label>
         <label class="field-group">
           <span>Unidad</span>
-          <InputText v-model.trim="supplyForm.unit" />
+          <Select
+            v-model="supplyForm.unit"
+            :options="activeSupplyUnits"
+            option-label="name"
+            option-value="name"
+            editable
+            filter
+            placeholder="Unidad"
+          />
         </label>
         <label class="field-group">
           <span>Stock minimo</span>
@@ -318,7 +423,15 @@
             </label>
             <label class="field-group request-line-field request-line-unit">
               <span>Unidad</span>
-              <InputText v-model.trim="line.unit" placeholder="Unidad" />
+              <Select
+                v-model="line.unit"
+                :options="activeSupplyUnits"
+                option-label="name"
+                option-value="name"
+                editable
+                filter
+                placeholder="Unidad"
+              />
             </label>
             <label class="field-group request-line-field request-line-quantity">
               <span>Cantidad</span>
@@ -370,7 +483,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import Button from "primevue/button";
 import Column from "primevue/column";
 import DataTable from "primevue/datatable";
@@ -382,6 +495,8 @@ import { useToast } from "primevue/usetoast";
 
 import {
   addSupplierQuote,
+  createSupplyCategory,
+  createSupplyUnit,
   createNotificationRecipient,
   createQuoteRequest,
   createSupply,
@@ -391,18 +506,23 @@ import {
   fetchProcurementSummary,
   fetchQuoteRequests,
   fetchSupplies,
+  fetchSupplyCatalogs,
   fetchSupplyMovements,
   saveEmailConfig,
   sendQuoteRequestEmail,
+  updateSupplyCategory,
   updateNotificationRecipient,
   updateQuoteRequest,
   updateSupply,
+  updateSupplyUnit,
 } from "../../services/procurement";
 
 const toast = useToast();
 const activeTab = ref("supplies");
 const saving = ref(false);
 const supplies = ref([]);
+const supplyCategories = ref([]);
+const supplyUnits = ref([]);
 const movements = ref([]);
 const requests = ref([]);
 const recipients = ref([]);
@@ -426,6 +546,7 @@ const tabs = [
   { key: "movements", label: "Movimientos", icon: "bi-arrow-left-right" },
   { key: "quotes", label: "Cotizaciones", icon: "bi-file-earmark-text" },
   { key: "email", label: "Correos", icon: "bi-envelope-at" },
+  { key: "catalogs", label: "Catalogos", icon: "bi-tags" },
 ];
 const movementTypes = [
   { label: "Ingreso", value: "INGRESO" },
@@ -440,6 +561,11 @@ const requestForm = reactive(emptyRequest());
 const quoteForm = reactive(emptyQuote());
 const emailConfig = reactive(emptyEmailConfig());
 const recipientForm = reactive(emptyRecipient());
+const categoryForm = reactive(emptyCategory());
+const unitForm = reactive(emptyUnit());
+
+const activeSupplyCategories = computed(() => supplyCategories.value.filter((category) => category.active));
+const activeSupplyUnits = computed(() => supplyUnits.value.filter((unit) => unit.active));
 
 function emptySupply() {
   return { id: null, code: "", name: "", category: "Limpieza", unit: "Unidad", min_stock: 0, current_stock: 0, location: "", notes: "", active: true };
@@ -479,13 +605,22 @@ function emptyRecipient() {
   return { email: "", name: "", active: true, procurement_quote_active: true };
 }
 
+function emptyCategory() {
+  return { id: null, name: "", description: "", active: true };
+}
+
+function emptyUnit() {
+  return { id: null, name: "", abbreviation: "", active: true };
+}
+
 function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
 async function loadData() {
-  const [summaryData, supplyData, movementData, requestData, configData, recipientData] = await Promise.all([
+  const [summaryData, catalogData, supplyData, movementData, requestData, configData, recipientData] = await Promise.all([
     fetchProcurementSummary(),
+    fetchSupplyCatalogs(),
     fetchSupplies({ include_inactive: true }),
     fetchSupplyMovements(),
     fetchQuoteRequests(),
@@ -493,11 +628,19 @@ async function loadData() {
     fetchNotificationRecipients(),
   ]);
   Object.assign(summary, summaryData || {});
+  supplyCategories.value = Array.isArray(catalogData?.categories) ? catalogData.categories : [];
+  supplyUnits.value = Array.isArray(catalogData?.units) ? catalogData.units : [];
   supplies.value = supplyData || [];
   movements.value = movementData || [];
   requests.value = requestData || [];
   Object.assign(emailConfig, emptyEmailConfig(), configData || {});
   recipients.value = recipientData || [];
+}
+
+async function loadCatalogs() {
+  const catalogData = await fetchSupplyCatalogs();
+  supplyCategories.value = Array.isArray(catalogData?.categories) ? catalogData.categories : [];
+  supplyUnits.value = Array.isArray(catalogData?.units) ? catalogData.units : [];
 }
 
 function openSupplyDialog(row = null) {
@@ -522,6 +665,64 @@ function openQuoteDialog(row) {
   selectedRequest.value = row;
   Object.assign(quoteForm, emptyQuote());
   quoteDialog.value = true;
+}
+
+function resetCategoryForm() {
+  Object.assign(categoryForm, emptyCategory());
+}
+
+function resetUnitForm() {
+  Object.assign(unitForm, emptyUnit());
+}
+
+function editCategory(category) {
+  Object.assign(categoryForm, emptyCategory(), category);
+  activeTab.value = "catalogs";
+}
+
+function editUnit(unit) {
+  Object.assign(unitForm, emptyUnit(), unit);
+  activeTab.value = "catalogs";
+}
+
+async function submitSupplyCategory() {
+  saving.value = true;
+  try {
+    const payload = {
+      name: categoryForm.name,
+      description: categoryForm.description,
+      active: Boolean(categoryForm.active),
+    };
+    if (categoryForm.id) await updateSupplyCategory(categoryForm.id, payload);
+    else await createSupplyCategory(payload);
+    await loadCatalogs();
+    resetCategoryForm();
+    toast.add({ severity: "success", summary: "Categoria guardada", life: 2600 });
+  } catch (error) {
+    toast.add({ severity: "error", summary: "No se pudo guardar", detail: error.message, life: 4200 });
+  } finally {
+    saving.value = false;
+  }
+}
+
+async function submitSupplyUnit() {
+  saving.value = true;
+  try {
+    const payload = {
+      name: unitForm.name,
+      abbreviation: unitForm.abbreviation,
+      active: Boolean(unitForm.active),
+    };
+    if (unitForm.id) await updateSupplyUnit(unitForm.id, payload);
+    else await createSupplyUnit(payload);
+    await loadCatalogs();
+    resetUnitForm();
+    toast.add({ severity: "success", summary: "Unidad guardada", life: 2600 });
+  } catch (error) {
+    toast.add({ severity: "error", summary: "No se pudo guardar", detail: error.message, life: 4200 });
+  } finally {
+    saving.value = false;
+  }
 }
 
 async function submitSupply() {
@@ -797,6 +998,12 @@ onMounted(async () => {
   gap: 1rem;
 }
 
+.procurement-catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
 .email-card {
   border: 1px solid rgba(148, 163, 184, 0.35);
   border-radius: 8px;
@@ -813,10 +1020,39 @@ onMounted(async () => {
   color: #64748b;
 }
 
+.procurement-catalog-list {
+  display: grid;
+  gap: 0.55rem;
+  max-height: 24rem;
+  overflow: auto;
+}
+
+.procurement-catalog-card {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 8px;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  padding: 0.7rem 0.8rem;
+}
+
+.procurement-catalog-card strong,
+.procurement-catalog-card span {
+  display: block;
+}
+
+.procurement-catalog-card span {
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
 @media (max-width: 900px) {
   .procurement-form-grid,
   .request-line-row,
-  .email-settings-grid {
+  .email-settings-grid,
+  .procurement-catalog-grid {
     grid-template-columns: 1fr;
   }
 

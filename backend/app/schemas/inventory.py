@@ -98,11 +98,29 @@ class MarcaResponse(MarcaBase):
 class BodegaBase(BaseModel):
     code: str
     name: str
+    sucursal_id: Optional[int] = None
+    can_invoice: bool = True
+    manages_inventory: bool = True
+    supplies_only: bool = False
+    invoice_series: Optional[str] = None
+    invoice_sequence: int = 0
     activo: bool = True
 
 
 class BodegaCreate(BodegaBase):
     pass
+
+
+class BodegaUpdate(BaseModel):
+    code: Optional[str] = None
+    name: Optional[str] = None
+    sucursal_id: Optional[int] = None
+    can_invoice: Optional[bool] = None
+    manages_inventory: Optional[bool] = None
+    supplies_only: Optional[bool] = None
+    invoice_series: Optional[str] = None
+    invoice_sequence: Optional[int] = None
+    activo: Optional[bool] = None
 
 
 class BodegaResponse(BodegaBase):

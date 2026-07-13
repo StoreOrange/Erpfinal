@@ -187,6 +187,11 @@ class Bodega(Base):
     code = Column(String(40), unique=True, nullable=False)
     name = Column(String(120), nullable=False)
     sucursal_id = Column(Integer, ForeignKey("sucursales.id"), nullable=True)
+    can_invoice = Column(Boolean, default=True)
+    manages_inventory = Column(Boolean, default=True)
+    supplies_only = Column(Boolean, default=False)
+    invoice_series = Column(String(20), nullable=True)
+    invoice_sequence = Column(Integer, default=0)
     activo = Column(Boolean, default=True)
     created_at = Column(DateTime, server_default=func.now())
 

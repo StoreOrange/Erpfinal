@@ -15,6 +15,38 @@ export function fetchProcurementSummary() {
   return apiRequest("/procurement/summary");
 }
 
+export function fetchSupplyCatalogs(params = {}) {
+  return apiRequest(`/procurement/catalogs${queryString(params)}`);
+}
+
+export function createSupplyCategory(payload) {
+  return apiRequest("/procurement/catalogs/categories", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateSupplyCategory(categoryId, payload) {
+  return apiRequest(`/procurement/catalogs/categories/${categoryId}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function createSupplyUnit(payload) {
+  return apiRequest("/procurement/catalogs/units", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateSupplyUnit(unitId, payload) {
+  return apiRequest(`/procurement/catalogs/units/${unitId}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function fetchSupplies(params = {}) {
   return apiRequest(`/procurement/supplies${queryString(params)}`);
 }

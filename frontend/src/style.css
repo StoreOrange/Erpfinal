@@ -37,6 +37,79 @@
   --erp-title-md: 1.1rem;
 }
 
+/* Ajuste de lectura para formularios densos de configuracion y compras.
+   Permite que etiquetas, checks y tags respiren en vez de montarse. */
+.app-main .settings-page .field-group,
+.app-main .procurement-page .field-group {
+  display: grid !important;
+  gap: 0.34rem !important;
+  min-height: auto !important;
+}
+
+.app-main .settings-page .field-group > span,
+.app-main .procurement-page .field-group > span {
+  margin-bottom: 0 !important;
+  overflow: visible !important;
+  line-height: 1.25 !important;
+  text-overflow: clip !important;
+  white-space: normal !important;
+}
+
+.app-main .settings-page .product-form-grid,
+.app-main .procurement-page .procurement-form-grid {
+  row-gap: 1rem !important;
+}
+
+.app-main .settings-page .products-checkbox,
+.app-main .procurement-page .products-checkbox {
+  align-items: flex-start !important;
+  height: auto !important;
+  min-height: 1.9rem !important;
+  white-space: normal !important;
+}
+
+.app-main .settings-page .products-checkbox span,
+.app-main .procurement-page .products-checkbox span {
+  min-width: 0 !important;
+  overflow: visible !important;
+  line-height: 1.25 !important;
+  white-space: normal !important;
+}
+
+.app-main .settings-page .third-party-card {
+  align-items: flex-start !important;
+  flex-wrap: wrap !important;
+}
+
+.app-main .settings-page .third-party-card > div:first-child {
+  flex: 1 1 14rem !important;
+  min-width: 0 !important;
+}
+
+.app-main .settings-page .third-party-card strong,
+.app-main .settings-page .third-party-card span,
+.app-main .settings-page .settings-env-head strong,
+.app-main .settings-page .settings-env-head span {
+  overflow-wrap: anywhere !important;
+  white-space: normal !important;
+}
+
+.app-main .settings-page .third-party-actions,
+.app-main .settings-page .settings-env-actions {
+  flex: 1 1 12rem !important;
+  flex-wrap: wrap !important;
+  justify-content: flex-end !important;
+  min-width: 0 !important;
+}
+
+.app-main .settings-page .third-party-actions .p-tag,
+.app-main .settings-page .settings-env-head .p-tag,
+.app-main .procurement-page .p-tag {
+  max-width: 100% !important;
+  overflow-wrap: anywhere !important;
+  white-space: normal !important;
+}
+
 :root[data-erp-theme="skethy"],
 :root[data-erp-theme="sketchy"] {
   --erp-bg: #f6f8fc;
@@ -9386,4 +9459,76 @@ body {
   .app-main .sales-combo-gift-row {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* Ajuste final anti-solapamiento en Datos y Compras. */
+.app-main .settings-page .field-group,
+.app-main .procurement-page .field-group {
+  display: grid !important;
+  gap: 0.38rem !important;
+  min-height: auto !important;
+}
+
+.app-main .settings-page .field-group > span,
+.app-main .procurement-page .field-group > span,
+.app-main .settings-page .products-checkbox span,
+.app-main .procurement-page .products-checkbox span {
+  min-width: 0 !important;
+  margin-bottom: 0 !important;
+  overflow: visible !important;
+  line-height: 1.25 !important;
+  text-overflow: clip !important;
+  white-space: normal !important;
+}
+
+.app-main .settings-page .product-form-grid,
+.app-main .procurement-page .procurement-form-grid {
+  row-gap: 1rem !important;
+}
+
+.app-main .settings-page .products-checkbox,
+.app-main .procurement-page .products-checkbox {
+  align-items: flex-start !important;
+  height: auto !important;
+  min-height: 1.9rem !important;
+  white-space: normal !important;
+}
+
+.app-main .settings-page .third-party-card,
+.app-main .procurement-page .procurement-catalog-card {
+  align-items: flex-start !important;
+  flex-wrap: wrap !important;
+}
+
+.app-main .settings-page .third-party-card > div:first-child,
+.app-main .procurement-page .procurement-catalog-card > div:first-child {
+  flex: 1 1 14rem !important;
+  min-width: 0 !important;
+}
+
+.app-main .settings-page .third-party-card strong,
+.app-main .settings-page .third-party-card span,
+.app-main .settings-page .settings-env-head strong,
+.app-main .settings-page .settings-env-head span,
+.app-main .procurement-page .procurement-catalog-card strong,
+.app-main .procurement-page .procurement-catalog-card span {
+  overflow-wrap: anywhere !important;
+  white-space: normal !important;
+}
+
+.app-main .settings-page .third-party-actions,
+.app-main .settings-page .settings-env-actions,
+.app-main .procurement-page .table-actions {
+  flex: 1 1 12rem !important;
+  flex-wrap: wrap !important;
+  justify-content: flex-end !important;
+  min-width: 0 !important;
+}
+
+.app-main .settings-page .third-party-actions .p-tag,
+.app-main .settings-page .settings-env-head .p-tag,
+.app-main .procurement-page .p-tag {
+  max-width: 100% !important;
+  overflow-wrap: anywhere !important;
+  white-space: normal !important;
 }

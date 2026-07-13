@@ -14,6 +14,26 @@ from sqlalchemy.sql import func
 from ..database import Base
 
 
+class SupplyCategory(Base):
+    __tablename__ = "supply_categories"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(120), unique=True, nullable=False, index=True)
+    description = Column(String(220), nullable=True)
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class SupplyUnit(Base):
+    __tablename__ = "supply_units"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(80), unique=True, nullable=False, index=True)
+    abbreviation = Column(String(20), nullable=True)
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
 class SupplyItem(Base):
     __tablename__ = "supply_items"
 

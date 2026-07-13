@@ -17,7 +17,15 @@ from sqlalchemy.orm import Session, joinedload
 from ..database import get_db
 from ..core.email import send_html_email
 from ..models.notification import EmailConfig, NotificationRecipient
-from ..models.procurement import QuoteRequest, QuoteRequestLine, SupplierQuote, SupplyItem, SupplyMovement
+from ..models.procurement import (
+    QuoteRequest,
+    QuoteRequestLine,
+    SupplierQuote,
+    SupplyCategory,
+    SupplyItem,
+    SupplyMovement,
+    SupplyUnit,
+)
 from ..schemas.procurement import (
     EmailConfigBase,
     EmailConfigResponse,
@@ -32,9 +40,16 @@ from ..schemas.procurement import (
     QuoteRequestUpdate,
     SupplierQuoteCreate,
     SupplierQuoteResponse,
+    SupplyCatalogsResponse,
+    SupplyCategoryCreate,
+    SupplyCategoryResponse,
+    SupplyCategoryUpdate,
     SupplyItemCreate,
     SupplyItemResponse,
     SupplyItemUpdate,
+    SupplyUnitCreate,
+    SupplyUnitResponse,
+    SupplyUnitUpdate,
     SupplyMovementCreate,
     SupplyMovementResponse,
 )
@@ -59,11 +74,47 @@ def _next_request_number(db: Session) -> str:
     return f"COT-{count + 1:06d}"
 
 
+def _seed_supply_catalogs(db: Session) -> None:
+    default_categories = [
+        ("Limpieza", "Insumos para aseo, higiene y desinfeccion"),
+        ("Papeleria", "Materiales de oficina y administracion"),
+        ("Mantenimiento", "Herramientas y consumibles de mantenimiento"),
+        ("Empaque", "Bolsas, cajas, etiquetas y materiales de empaque"),
+        ("Seguridad", "Equipo e insumos de seguridad ocupacional"),
+        ("Otros", "Insumos generales no clasificados"),
+    ]
+    default_units = [
+        ("Unidad", "UND"),
+        ("Caja", "CJ"),
+        ("Paquete", "PQT"),
+        ("Galon", "GL"),
+        ("Litro", "LT"),
+        ("Metro", "M"),
+        ("Rollo", "ROLL"),
+        ("Par", "PAR"),
+    ]
+    for name, description in default_categories:
+        if not db.query(SupplyCategory).filter(func.lower(SupplyCategory.name) == name.lower()).first():
+            db.add(SupplyCategory(name=name, description=description, active=True))
+    for name, abbreviation in default_units:
+        if not db.query(SupplyUnit).filter(func.lower(SupplyUnit.name) == name.lower()).first():
+            db.add(SupplyUnit(name=name, abbreviation=abbreviation, active=True))
+    db.commit()
+
+
 def _movement_type(value: str) -> str:
     text = _normalize(value, "Tipo de movimiento").upper()
     if text not in {"INGRESO", "CONSUMO", "AJUSTE"}:
         raise HTTPException(status_code=400, detail="Tipo debe ser INGRESO, CONSUMO o AJUSTE")
     return text
+
+
+def _category_response(category: SupplyCategory) -> SupplyCategoryResponse:
+    return SupplyCategoryResponse.model_validate(category)
+
+
+def _unit_response(unit: SupplyUnit) -> SupplyUnitResponse:
+    return SupplyUnitResponse.model_validate(unit)
 
 
 def _supply_response(item: SupplyItem) -> SupplyItemResponse:
@@ -182,6 +233,96 @@ def _quote_request_email_html(request: QuoteRequest) -> str:
     </body>
     </html>
     """
+
+
+@router.get("/catalogs", response_model=SupplyCatalogsResponse)
+def list_supply_catalogs(include_inactive: bool = True, db: Session = Depends(get_db)):
+    _seed_supply_catalogs(db)
+    category_query = db.query(SupplyCategory).order_by(SupplyCategory.name)
+    unit_query = db.query(SupplyUnit).order_by(SupplyUnit.name)
+    if not include_inactive:
+        category_query = category_query.filter(SupplyCategory.active.is_(True))
+        unit_query = unit_query.filter(SupplyUnit.active.is_(True))
+    return SupplyCatalogsResponse(
+        categories=[_category_response(category) for category in category_query.all()],
+        units=[_unit_response(unit) for unit in unit_query.all()],
+    )
+
+
+@router.post("/catalogs/categories", response_model=SupplyCategoryResponse, status_code=status.HTTP_201_CREATED)
+def create_supply_category(payload: SupplyCategoryCreate, db: Session = Depends(get_db)):
+    name = _normalize(payload.name, "Categoria")
+    if db.query(SupplyCategory).filter(func.lower(SupplyCategory.name) == name.lower()).first():
+        raise HTTPException(status_code=400, detail="Categoria de insumo ya existe")
+    category = SupplyCategory(
+        name=name,
+        description=(payload.description or "").strip() or None,
+        active=payload.active,
+    )
+    db.add(category)
+    db.commit()
+    db.refresh(category)
+    return _category_response(category)
+
+
+@router.put("/catalogs/categories/{category_id}", response_model=SupplyCategoryResponse)
+def update_supply_category(category_id: int, payload: SupplyCategoryUpdate, db: Session = Depends(get_db)):
+    category = db.query(SupplyCategory).filter(SupplyCategory.id == category_id).first()
+    if not category:
+        raise HTTPException(status_code=404, detail="Categoria de insumo no encontrada")
+    data = payload.model_dump(exclude_unset=True)
+    if data.get("name") is not None:
+        name = _normalize(data["name"], "Categoria")
+        exists = db.query(SupplyCategory).filter(func.lower(SupplyCategory.name) == name.lower(), SupplyCategory.id != category.id).first()
+        if exists:
+            raise HTTPException(status_code=400, detail="Categoria de insumo ya existe")
+        category.name = name
+    if "description" in data:
+        category.description = (data["description"] or "").strip() or None
+    if "active" in data:
+        category.active = bool(data["active"])
+    db.add(category)
+    db.commit()
+    db.refresh(category)
+    return _category_response(category)
+
+
+@router.post("/catalogs/units", response_model=SupplyUnitResponse, status_code=status.HTTP_201_CREATED)
+def create_supply_unit(payload: SupplyUnitCreate, db: Session = Depends(get_db)):
+    name = _normalize(payload.name, "Unidad")
+    if db.query(SupplyUnit).filter(func.lower(SupplyUnit.name) == name.lower()).first():
+        raise HTTPException(status_code=400, detail="Unidad de insumo ya existe")
+    unit = SupplyUnit(
+        name=name,
+        abbreviation=(payload.abbreviation or "").strip() or None,
+        active=payload.active,
+    )
+    db.add(unit)
+    db.commit()
+    db.refresh(unit)
+    return _unit_response(unit)
+
+
+@router.put("/catalogs/units/{unit_id}", response_model=SupplyUnitResponse)
+def update_supply_unit(unit_id: int, payload: SupplyUnitUpdate, db: Session = Depends(get_db)):
+    unit = db.query(SupplyUnit).filter(SupplyUnit.id == unit_id).first()
+    if not unit:
+        raise HTTPException(status_code=404, detail="Unidad de insumo no encontrada")
+    data = payload.model_dump(exclude_unset=True)
+    if data.get("name") is not None:
+        name = _normalize(data["name"], "Unidad")
+        exists = db.query(SupplyUnit).filter(func.lower(SupplyUnit.name) == name.lower(), SupplyUnit.id != unit.id).first()
+        if exists:
+            raise HTTPException(status_code=400, detail="Unidad de insumo ya existe")
+        unit.name = name
+    if "abbreviation" in data:
+        unit.abbreviation = (data["abbreviation"] or "").strip() or None
+    if "active" in data:
+        unit.active = bool(data["active"])
+    db.add(unit)
+    db.commit()
+    db.refresh(unit)
+    return _unit_response(unit)
 
 
 @router.get("/summary", response_model=ProcurementSummaryResponse)
