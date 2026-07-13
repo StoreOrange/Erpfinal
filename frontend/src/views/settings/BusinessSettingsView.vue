@@ -552,6 +552,130 @@
           </div>
         </article>
 
+        <article v-else-if="currentSection === 'catalogs'" class="panel-card">
+          <div class="panel-head">
+            <div>
+              <span class="products-section-kicker">Catalogos de productos</span>
+              <h3>Lineas y marcas</h3>
+              <p class="panel-text">
+                Crea y mantiene los catalogos que se usan al registrar productos.
+              </p>
+            </div>
+            <Tag severity="info" :value="`${lineas.length + marcas.length} registros`" />
+          </div>
+
+          <div class="third-party-tabs">
+            <button
+              v-for="tab in productCatalogTabs"
+              :key="tab.key"
+              type="button"
+              :class="{ active: activeCatalogTab === tab.key }"
+              @click="activeCatalogTab = tab.key"
+            >
+              <i class="bi" :class="tab.icon"></i>
+              <span>{{ tab.label }}</span>
+            </button>
+          </div>
+
+          <div v-if="activeCatalogTab === 'lineas'" class="third-party-layout">
+            <form class="settings-env-form" @submit.prevent="submitLinea">
+              <div class="product-form-grid">
+                <label class="field-group">
+                  <span>Codigo de linea</span>
+                  <input
+                    v-model.trim="lineaForm.cod_linea"
+                    class="form-control"
+                    type="text"
+                    maxlength="50"
+                    placeholder="ROPA"
+                    required
+                    @input="lineaForm.cod_linea = toUpperValue(lineaForm.cod_linea)"
+                  />
+                </label>
+                <label class="field-group field-span-2">
+                  <span>Nombre de linea</span>
+                  <input
+                    v-model.trim="lineaForm.linea"
+                    class="form-control"
+                    type="text"
+                    maxlength="120"
+                    placeholder="ROPA AMERICANA"
+                    required
+                    @input="lineaForm.linea = toUpperValue(lineaForm.linea)"
+                  />
+                </label>
+                <label class="products-checkbox">
+                  <input v-model="lineaForm.activo" type="checkbox" />
+                  <span>Activa</span>
+                </label>
+              </div>
+              <div class="product-form-actions">
+                <Button type="button" severity="secondary" variant="outlined" @click="resetLineaForm">Limpiar</Button>
+                <Button :disabled="catalogLoading" type="submit">
+                  {{ lineaForm.id ? "Actualizar linea" : "Crear linea" }}
+                </Button>
+              </div>
+            </form>
+
+            <div class="third-party-list">
+              <article v-for="linea in lineas" :key="linea.id" class="third-party-card">
+                <div>
+                  <strong>{{ linea.linea }}</strong>
+                  <span>{{ linea.cod_linea || "Sin codigo" }}</span>
+                </div>
+                <div class="third-party-actions">
+                  <Tag :severity="linea.activo ? 'success' : 'contrast'" :value="linea.activo ? 'Activa' : 'Inactiva'" />
+                  <Button size="small" severity="secondary" variant="outlined" label="Editar" @click="editLinea(linea)" />
+                </div>
+              </article>
+              <div v-if="!lineas.length" class="empty-state">No hay lineas registradas.</div>
+            </div>
+          </div>
+
+          <div v-else class="third-party-layout">
+            <form class="settings-env-form" @submit.prevent="submitMarca">
+              <div class="product-form-grid">
+                <label class="field-group field-span-2">
+                  <span>Nombre de marca</span>
+                  <input
+                    v-model.trim="marcaForm.nombre"
+                    class="form-control"
+                    type="text"
+                    maxlength="120"
+                    placeholder="SIN MARCA"
+                    required
+                    @input="marcaForm.nombre = toUpperValue(marcaForm.nombre)"
+                  />
+                </label>
+                <label class="products-checkbox">
+                  <input v-model="marcaForm.activo" type="checkbox" />
+                  <span>Activa</span>
+                </label>
+              </div>
+              <div class="product-form-actions">
+                <Button type="button" severity="secondary" variant="outlined" @click="resetMarcaForm">Limpiar</Button>
+                <Button :disabled="catalogLoading" type="submit">
+                  {{ marcaForm.id ? "Actualizar marca" : "Crear marca" }}
+                </Button>
+              </div>
+            </form>
+
+            <div class="third-party-list">
+              <article v-for="marca in marcas" :key="marca.id" class="third-party-card">
+                <div>
+                  <strong>{{ marca.nombre }}</strong>
+                  <span>Catalogo de marcas</span>
+                </div>
+                <div class="third-party-actions">
+                  <Tag :severity="marca.activo ? 'success' : 'contrast'" :value="marca.activo ? 'Activa' : 'Inactiva'" />
+                  <Button size="small" severity="secondary" variant="outlined" label="Editar" @click="editMarca(marca)" />
+                </div>
+              </article>
+              <div v-if="!marcas.length" class="empty-state">No hay marcas registradas.</div>
+            </div>
+          </div>
+        </article>
+
         <article v-else-if="currentSection === 'policies'" class="panel-card">
           <div class="panel-head">
             <div>
@@ -661,7 +785,15 @@ import Button from "primevue/button";
 import Tag from "primevue/tag";
 
 import { createVendor, fetchAccessUsers, fetchBranches, fetchVendors, updateVendor } from "../../services/access";
-import { createProveedor, fetchInventoryCatalogs, updateProveedor } from "../../services/inventory";
+import {
+  createLinea,
+  createMarca,
+  createProveedor,
+  fetchInventoryCatalogs,
+  updateLinea,
+  updateMarca,
+  updateProveedor,
+} from "../../services/inventory";
 import { createCustomer, fetchCustomers, updateCustomer } from "../../services/sales";
 import {
   activateCompanyEnvironment,
@@ -682,6 +814,12 @@ const sections = [
     label: "Informacion del negocio",
     caption: "Perfil, branding y datos corporativos",
     icon: "bi-building",
+  },
+  {
+    key: "catalogs",
+    label: "Catalogos",
+    caption: "Lineas y marcas de productos",
+    icon: "bi-tags",
   },
   {
     key: "environment",
@@ -719,6 +857,11 @@ const thirdPartyTabs = [
   { key: "customers", label: "Clientes", icon: "bi-people" },
   { key: "vendors", label: "Vendedores", icon: "bi-person-badge" },
   { key: "providers", label: "Proveedores", icon: "bi-truck" },
+];
+
+const productCatalogTabs = [
+  { key: "lineas", label: "Lineas", icon: "bi-diagram-3" },
+  { key: "marcas", label: "Marcas", icon: "bi-tags" },
 ];
 
 const salesInterfaceOptions = [
@@ -763,6 +906,7 @@ const loading = ref(false);
 const environmentLoading = ref(false);
 const exchangeRateLoading = ref(false);
 const thirdPartyLoading = ref(false);
+const catalogLoading = ref(false);
 const error = ref("");
 const success = ref("");
 const environments = ref([]);
@@ -772,9 +916,12 @@ const activeThirdPartyTab = ref("customers");
 const customers = ref([]);
 const vendors = ref([]);
 const providers = ref([]);
+const lineas = ref([]);
+const marcas = ref([]);
 const users = ref([]);
 const branches = ref([]);
 const bodegas = ref([]);
+const activeCatalogTab = ref("lineas");
 const files = reactive({
   logo_login: null,
   logo_sidebar: null,
@@ -828,6 +975,8 @@ const exchangeRateForm = reactive({
 const customerForm = reactive(getEmptyCustomerForm());
 const vendorForm = reactive(getEmptyVendorForm());
 const providerForm = reactive(getEmptyProviderForm());
+const lineaForm = reactive(getEmptyLineaForm());
+const marcaForm = reactive(getEmptyMarcaForm());
 
 const enabledPolicies = computed(
   () =>
@@ -936,6 +1085,18 @@ function getEmptyProviderForm() {
   return { id: null, nombre: "", tipo: "", activo: true };
 }
 
+function getEmptyLineaForm() {
+  return { id: null, cod_linea: "", linea: "", activo: true };
+}
+
+function getEmptyMarcaForm() {
+  return { id: null, nombre: "", activo: true };
+}
+
+function toUpperValue(value) {
+  return (value || "").toString().toUpperCase();
+}
+
 function nextVendorCode() {
   if (!vendors.value.length) return "VEN-PISO";
   return `VEN-${String(vendors.value.length + 1).padStart(3, "0")}`;
@@ -959,6 +1120,14 @@ function resetProviderForm() {
   Object.assign(providerForm, getEmptyProviderForm());
 }
 
+function resetLineaForm() {
+  Object.assign(lineaForm, getEmptyLineaForm());
+}
+
+function resetMarcaForm() {
+  Object.assign(marcaForm, getEmptyMarcaForm());
+}
+
 function editCustomer(customer) {
   Object.assign(customerForm, getEmptyCustomerForm(), customer);
   activeThirdPartyTab.value = "customers";
@@ -979,6 +1148,25 @@ function editProvider(provider) {
   activeThirdPartyTab.value = "providers";
 }
 
+function editLinea(linea) {
+  Object.assign(lineaForm, getEmptyLineaForm(), {
+    id: linea.id,
+    cod_linea: linea.cod_linea || "",
+    linea: linea.linea || "",
+    activo: Boolean(linea.activo),
+  });
+  activeCatalogTab.value = "lineas";
+}
+
+function editMarca(marca) {
+  Object.assign(marcaForm, getEmptyMarcaForm(), {
+    id: marca.id,
+    nombre: marca.nombre || "",
+    activo: Boolean(marca.activo),
+  });
+  activeCatalogTab.value = "marcas";
+}
+
 async function loadThirdParties() {
   try {
     const [customerData, vendorData, userData, branchData, catalogData] = await Promise.all([
@@ -994,11 +1182,74 @@ async function loadThirdParties() {
     branches.value = Array.isArray(branchData) ? branchData : [];
     providers.value = Array.isArray(catalogData?.proveedores) ? catalogData.proveedores : [];
     bodegas.value = Array.isArray(catalogData?.bodegas) ? catalogData.bodegas : [];
+    lineas.value = Array.isArray(catalogData?.lineas) ? catalogData.lineas : [];
+    marcas.value = Array.isArray(catalogData?.marcas) ? catalogData.marcas : [];
     if (!vendorForm.id && !vendorForm.code) {
       resetVendorForm();
     }
   } catch (err) {
     error.value = err.message || "No se pudieron cargar los catalogos de terceros";
+  }
+}
+
+async function loadProductCatalogs() {
+  try {
+    const catalogData = await fetchInventoryCatalogs();
+    lineas.value = Array.isArray(catalogData?.lineas) ? catalogData.lineas : [];
+    marcas.value = Array.isArray(catalogData?.marcas) ? catalogData.marcas : [];
+  } catch (err) {
+    error.value = err.message || "No se pudieron cargar las lineas y marcas";
+  }
+}
+
+async function submitLinea() {
+  catalogLoading.value = true;
+  error.value = "";
+  success.value = "";
+  try {
+    const payload = {
+      cod_linea: lineaForm.cod_linea,
+      linea: lineaForm.linea,
+      activo: Boolean(lineaForm.activo),
+    };
+    if (lineaForm.id) {
+      await updateLinea(lineaForm.id, payload);
+      success.value = "Linea actualizada.";
+    } else {
+      await createLinea(payload);
+      success.value = "Linea creada.";
+    }
+    await loadProductCatalogs();
+    resetLineaForm();
+  } catch (err) {
+    error.value = err.message || "No se pudo guardar la linea";
+  } finally {
+    catalogLoading.value = false;
+  }
+}
+
+async function submitMarca() {
+  catalogLoading.value = true;
+  error.value = "";
+  success.value = "";
+  try {
+    const payload = {
+      nombre: marcaForm.nombre,
+      activo: Boolean(marcaForm.activo),
+    };
+    if (marcaForm.id) {
+      await updateMarca(marcaForm.id, payload);
+      success.value = "Marca actualizada.";
+    } else {
+      await createMarca(payload);
+      success.value = "Marca creada.";
+    }
+    await loadProductCatalogs();
+    resetMarcaForm();
+  } catch (err) {
+    error.value = err.message || "No se pudo guardar la marca";
+  } finally {
+    catalogLoading.value = false;
   }
 }
 
