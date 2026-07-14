@@ -1425,7 +1425,7 @@ def create_paca_apertura(payload: PacaAperturaCreate, db: Session = Depends(get_
         if available < quantity:
             raise HTTPException(
                 status_code=400,
-                detail=f"Stock insuficiente para abrir {product.cod_producto}. Disponible: {available}",
+                detail=f"Stock insuficiente para abrir {product.cod_producto} en {bodega.name}. Disponible: {available}",
             )
         unit_usd, unit_cs = _product_cost_pair(product, tasa, settings)
         subtotal_usd = unit_usd * quantity

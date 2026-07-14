@@ -167,7 +167,7 @@
                         <small>{{ option.cod_producto }}</small>
                       </div>
                       <div>
-                        <span>Exist. {{ formatQty(productStock(option)) }}</span>
+                        <span>Saldo global {{ formatQty(productStock(option)) }}</span>
                         <span>Costo C$ {{ formatMoney(option.costo_producto) }}</span>
                       </div>
                     </div>
@@ -197,13 +197,13 @@
                   <strong>{{ productCode(sourceDraft.producto_id) }} - {{ productLabel(sourceDraft.producto_id) }}</strong>
                 </div>
                 <div>
-                  <span>Existencia disponible</span>
+                  <span>Disponible en bodega origen</span>
                   <strong :class="{ 'paca-negative': sourceAvailable(sourceDraft) <= 0 }">
                     {{ formatQty(sourceAvailable(sourceDraft)) }}
                   </strong>
                 </div>
                 <div>
-                  <span>Saldo global</span>
+                  <span>Saldo global referencia</span>
                   <strong>{{ formatQty(productGlobalStock(sourceDraft.producto_id)) }}</strong>
                 </div>
                 <div>
@@ -212,7 +212,7 @@
                 </div>
               </div>
               <small v-if="sourceDraft.producto_id && sourceAvailable(sourceDraft) <= 0" class="paca-stock-warning">
-                Producto no posee existencia, valide antes de registrar la produccion de abiertas de pacas.
+                La bodega origen seleccionada no tiene existencia disponible para esta paca.
               </small>
             </div>
 
@@ -524,7 +524,7 @@ function getEmptySource() {
     producto_id: null,
     cantidad: 1,
     precio_unitario: 0,
-    existencia: 0,
+    existencia: null,
   };
 }
 
@@ -581,7 +581,7 @@ function sourceAvailable(source) {
   if (source?.existencia !== null && source?.existencia !== undefined) {
     return Number(source.existencia || 0);
   }
-  return productStock(productById(source?.producto_id));
+  return 0;
 }
 
 function toIsoDate(date) {
@@ -679,15 +679,17 @@ function validateSourceLine(source) {
 
 async function refreshSourceBalance(source) {
   if (!source?.producto_id || !form.bodega_id) {
-    source.existencia = 0;
+    source.existencia = null;
     return;
   }
+  source.existencia = null;
   try {
     const balances = await fetchProductBalances(source.producto_id);
     const row = balances.find((item) => Number(item.bodega_id) === Number(form.bodega_id));
     source.existencia = Number(row?.existencia || 0);
   } catch {
-    source.existencia = productStock(productById(source.producto_id));
+    source.existencia = 0;
+    formError.value = "No se pudo consultar la existencia por bodega. Intenta nuevamente antes de procesar.";
   }
 }
 
@@ -801,8 +803,10 @@ watch(
       form.bodega_destino_id = nextBodegaId;
     }
     await Promise.all(sourceLines.value.map((source) => refreshSourceBalance(source)));
+    sourceLines.value.forEach((source) => validateSourceLine(source));
     if (sourceDraft.producto_id) {
       await refreshSourceBalance(sourceDraft);
+      validateSourceLine(sourceDraft);
     }
   },
 );
