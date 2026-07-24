@@ -19,6 +19,10 @@ export function fetchReportsSummary(filters) {
   return apiRequest(`/reports/summary${buildQuery(filters)}`);
 }
 
+export function fetchSalesDashboardReport(filters) {
+  return apiRequest(`/reports/sales-dashboard${buildQuery(filters)}`);
+}
+
 export function fetchSalesDetailedReport(filters) {
   return apiRequest(`/reports/sales-detailed${buildQuery(filters)}`);
 }
@@ -37,6 +41,10 @@ export function fetchInventoryConsolidatedReport() {
 
 export function fetchWarehouseBalancesReport(filters) {
   return apiRequest(`/reports/saldos-bodega${buildQuery(filters)}`);
+}
+
+export function fetchInventoryExistencesReport(filters) {
+  return apiRequest(`/reports/inventory-existences${buildQuery(filters)}`);
 }
 
 export function fetchKardexReport(filters) {
