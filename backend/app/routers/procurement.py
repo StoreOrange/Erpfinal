@@ -474,7 +474,7 @@ def create_supply(payload: SupplyItemCreate, db: Session = Depends(get_db)):
     code = (payload.code or _next_supply_code(db)).strip().upper()
     if db.query(SupplyItem).filter(func.lower(SupplyItem.code) == code.lower()).first():
         raise HTTPException(status_code=400, detail="Codigo de insumo ya existe")
-    item = SupplyItem(**payload.model_dump(exclude={"code"}), code=code, name=_normalize(payload.name, "Insumo"))
+    item = SupplyItem(**payload.model_dump(exclude={"code", "name"}), code=code, name=_normalize(payload.name, "Insumo"))
     db.add(item)
     db.commit()
     db.refresh(item)
@@ -566,7 +566,7 @@ def create_quote_request(payload: QuoteRequestCreate, db: Session = Depends(get_
         notes=(payload.notes or "").strip() or None,
     )
     for line in payload.lines:
-        request.lines.append(QuoteRequestLine(**line.model_dump(), description=_normalize(line.description, "Descripcion")))
+        request.lines.append(QuoteRequestLine(**line.model_dump(exclude={"description"}), description=_normalize(line.description, "Descripcion")))
     db.add(request)
     db.commit()
     db.refresh(request)
@@ -590,7 +590,7 @@ def update_quote_request(request_id: int, payload: QuoteRequestUpdate, db: Sessi
         request.lines.clear()
         db.flush()
         for line in payload.lines:
-            request.lines.append(QuoteRequestLine(**line.model_dump(), description=_normalize(line.description, "Descripcion")))
+            request.lines.append(QuoteRequestLine(**line.model_dump(exclude={"description"}), description=_normalize(line.description, "Descripcion")))
     db.add(request)
     db.commit()
     db.refresh(request)
