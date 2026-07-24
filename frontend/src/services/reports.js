@@ -47,6 +47,10 @@ export function fetchInventoryExistencesReport(filters) {
   return apiRequest(`/reports/inventory-existences${buildQuery(filters)}`);
 }
 
+export function fetchPacaOpeningsReport(filters) {
+  return apiRequest(`/reports/paca-openings${buildQuery(filters)}`);
+}
+
 export function fetchKardexReport(filters) {
   return apiRequest(`/reports/kardex${buildQuery(filters)}`);
 }

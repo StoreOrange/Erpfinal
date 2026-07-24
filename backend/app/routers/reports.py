@@ -12,7 +12,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
 from ..models.inventory import (
@@ -21,6 +21,9 @@ from ..models.inventory import (
     EgresoItem,
     IngresoInventario,
     IngresoItem,
+    PacaApertura,
+    PacaAperturaLinea,
+    PacaAperturaOrigen,
     Producto,
     SaldoProducto,
 )
@@ -88,6 +91,15 @@ def _base_voucher_query(
     if sucursal_id:
         query = query.join(Bodega, Bodega.id == CashVoucher.bodega_id).filter(Bodega.sucursal_id == sucursal_id)
     return query
+
+
+def _result_label(value) -> str:
+    amount = Decimal(str(value or 0))
+    if amount > 0:
+        return "GANANCIA"
+    if amount < 0:
+        return "PERDIDA"
+    return "EQUILIBRIO"
 
 
 @router.get("/catalogs")
@@ -325,6 +337,100 @@ def sales_dashboard_report(
             for row in warehouse_rows
         ],
         "quarterly": quarterly,
+    }
+
+
+@router.get("/paca-openings")
+def paca_openings_report(
+    start_date: date | None = Query(None),
+    end_date: date | None = Query(None),
+    sucursal_id: int | None = Query(None),
+    bodega_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    start, end = _date_range(start_date, end_date)
+    query = (
+        db.query(PacaApertura)
+        .options(
+            joinedload(PacaApertura.paca_producto),
+            joinedload(PacaApertura.bodega),
+            joinedload(PacaApertura.bodega_destino),
+            joinedload(PacaApertura.origenes).joinedload(PacaAperturaOrigen.producto),
+            joinedload(PacaApertura.lineas).joinedload(PacaAperturaLinea.producto),
+        )
+        .filter(PacaApertura.fecha.between(start, end))
+    )
+    if bodega_id:
+        query = query.filter(PacaApertura.bodega_id == bodega_id)
+    if sucursal_id:
+        query = query.join(Bodega, Bodega.id == PacaApertura.bodega_id).filter(Bodega.sucursal_id == sucursal_id)
+
+    rows = []
+    total_costo_origen_cs = Decimal("0")
+    total_valor_resultante_cs = Decimal("0")
+    total_diferencia_cs = Decimal("0")
+    total_pacas = Decimal("0")
+    total_unidades_resultantes = Decimal("0")
+    for apertura in query.order_by(PacaApertura.fecha.desc(), PacaApertura.id.desc()).all():
+        costo_origen_cs = Decimal(str(apertura.costo_origen_cs or 0))
+        valor_resultante_cs = Decimal(str(apertura.valor_estimado_cs or 0))
+        diferencia_cs = Decimal(str(apertura.diferencia_cs or 0))
+        cantidad_pacas = Decimal(str(apertura.cantidad_pacas or 0))
+        cantidad_resultante = sum(Decimal(str(line.cantidad or 0)) for line in apertura.lineas or [])
+        margen = (diferencia_cs / costo_origen_cs * Decimal("100")) if costo_origen_cs > 0 else Decimal("0")
+        total_costo_origen_cs += costo_origen_cs
+        total_valor_resultante_cs += valor_resultante_cs
+        total_diferencia_cs += diferencia_cs
+        total_pacas += cantidad_pacas
+        total_unidades_resultantes += cantidad_resultante
+        rows.append(
+            {
+                "id": apertura.id,
+                "documento": f"PAC-{apertura.id:06d}",
+                "fecha": apertura.fecha.isoformat(),
+                "cod_paca": apertura.paca_producto.cod_producto if apertura.paca_producto else "",
+                "paca": apertura.paca_producto.descripcion if apertura.paca_producto else "",
+                "paca_origen": apertura.paca_producto.descripcion if apertura.paca_producto else "",
+                "bodega_origen": apertura.bodega.name if apertura.bodega else "",
+                "bodega_destino": apertura.bodega_destino.name if apertura.bodega_destino else (apertura.bodega.name if apertura.bodega else ""),
+                "cantidad_pacas": _to_float(cantidad_pacas),
+                "unidades_resultantes": _to_float(cantidad_resultante),
+                "cantidad_resultante": _to_float(cantidad_resultante),
+                "costo_origen_cs": _to_float(costo_origen_cs),
+                "valor_estimado_cs": _to_float(valor_resultante_cs),
+                "valor_resultante_cs": _to_float(valor_resultante_cs),
+                "diferencia_cs": _to_float(diferencia_cs),
+                "resultado": _result_label(diferencia_cs),
+                "margen_percent": _to_float(margen),
+                "costo_promedio_paca_cs": _to_float(costo_origen_cs / cantidad_pacas) if cantidad_pacas > 0 else 0,
+                "costo_unitario_resultante_cs": _to_float(costo_origen_cs / cantidad_resultante) if cantidad_resultante > 0 else 0,
+                "ingreso": f"ING-{apertura.ingreso_id:06d}" if apertura.ingreso_id else "",
+                "egreso": f"EGR-{apertura.egreso_id:06d}" if apertura.egreso_id else "",
+                "estado": apertura.estado,
+                "usuario_registro": apertura.usuario_registro or "",
+                "observacion": apertura.observacion or "",
+                "origenes": "; ".join(
+                    f"{line.producto.cod_producto if line.producto else ''} {line.producto.descripcion if line.producto else ''} x {_to_float(line.cantidad)} = C$ {_to_float(line.subtotal_cs):,.2f}"
+                    for line in apertura.origenes or []
+                ),
+                "resultantes": "; ".join(
+                    f"{line.producto.cod_producto if line.producto else ''} {line.producto.descripcion if line.producto else ''} x {_to_float(line.cantidad)} = C$ {_to_float(line.valor_estimado_cs):,.2f}"
+                    for line in apertura.lineas or []
+                ),
+            }
+        )
+    return {
+        "summary": {
+            "aperturas": len(rows),
+            "cantidad_pacas": _to_float(total_pacas),
+            "unidades_resultantes": _to_float(total_unidades_resultantes),
+            "costo_origen_cs": _to_float(total_costo_origen_cs),
+            "valor_estimado_cs": _to_float(total_valor_resultante_cs),
+            "diferencia_cs": _to_float(total_diferencia_cs),
+            "resultado": _result_label(total_diferencia_cs),
+            "margen_percent": _to_float(total_diferencia_cs / total_costo_origen_cs * Decimal("100")) if total_costo_origen_cs > 0 else 0,
+        },
+        "rows": rows,
     }
 
 

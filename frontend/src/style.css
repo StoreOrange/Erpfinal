@@ -8500,6 +8500,71 @@ input[type="month"].form-control::-webkit-calendar-picker-indicator:hover {
   font-size: 0.78rem;
 }
 
+.paca-report-result {
+  align-items: center;
+  border: 1px solid rgba(45, 138, 95, 0.22);
+  border-radius: 12px;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.72rem 0.82rem;
+  background: #f7fcfa;
+}
+
+.paca-report-result.paca-negative {
+  border-color: rgba(181, 84, 84, 0.24);
+  background: #fff8f8;
+}
+
+.paca-report-result span,
+.paca-report-note span,
+.paca-report-section-title span {
+  display: block;
+  color: var(--erp-text-muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.paca-report-result strong {
+  color: inherit;
+  display: block;
+  font-size: 1.18rem;
+}
+
+.paca-report-result small {
+  color: var(--erp-text-muted);
+  display: block;
+  font-size: 0.72rem;
+  margin-top: 0.1rem;
+}
+
+.paca-report-note {
+  border: 1px dashed var(--erp-line);
+  border-radius: 10px;
+  padding: 0.58rem 0.7rem;
+  background: #fbfbfd;
+}
+
+.paca-report-note p {
+  color: var(--erp-text);
+  font-size: 0.78rem;
+  margin: 0.18rem 0 0;
+}
+
+.paca-report-section-title {
+  align-items: baseline;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0.18rem 0 -0.25rem;
+}
+
+.paca-report-section-title strong {
+  color: var(--erp-text);
+  font-size: 0.86rem;
+}
+
 .paca-positive {
   color: #2d8a5f !important;
 }
@@ -8548,8 +8613,17 @@ input[type="month"].form-control::-webkit-calendar-picker-indicator:hover {
   body.printing-paca-report .module-hero,
   body.printing-paca-report .movement-entry-card,
   body.printing-paca-report .movement-history-card > .movement-card-head,
-  body.printing-paca-report .movement-history-table {
+  body.printing-paca-report .movement-history-table,
+  body.printing-paca-report .paca-tabs,
+  body.printing-paca-report .paca-report-head .p-button {
     display: none !important;
+  }
+
+  body.printing-paca-report,
+  body.printing-paca-report .app-shell,
+  body.printing-paca-report .app-main,
+  body.printing-paca-report .page-section {
+    background: #ffffff !important;
   }
 
   body.printing-paca-report .app-main {
@@ -8563,7 +8637,32 @@ input[type="month"].form-control::-webkit-calendar-picker-indicator:hover {
   body.printing-paca-report .paca-report {
     display: block !important;
     border: 0 !important;
+    border-radius: 0 !important;
     box-shadow: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body.printing-paca-report .paca-report-head,
+  body.printing-paca-report .paca-report-result,
+  body.printing-paca-report .paca-report-kpis,
+  body.printing-paca-report .paca-report-meta,
+  body.printing-paca-report .paca-report-note,
+  body.printing-paca-report .paca-report-section-title {
+    break-inside: avoid;
+  }
+
+  body.printing-paca-report .paca-report-kpis,
+  body.printing-paca-report .paca-report-meta {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  body.printing-paca-report .movements-table {
+    font-size: 0.72rem;
+  }
+
+  body.printing-paca-report .p-datatable-paginator-bottom {
+    display: none !important;
   }
 }
 
