@@ -239,6 +239,74 @@
         </div>
       </div>
 
+      <div v-else-if="isPacaOpeningsReport" class="paca-openings-report">
+        <div class="paca-openings-summary">
+          <div>
+            <span>Aperturas</span>
+            <strong>{{ pacaOpeningsReport.summary.aperturas }}</strong>
+          </div>
+          <div>
+            <span>Costo origen</span>
+            <strong>C$ {{ formatMoney(pacaOpeningsReport.summary.costo_origen_cs) }}</strong>
+          </div>
+          <div>
+            <span>Valor producido</span>
+            <strong>C$ {{ formatMoney(pacaOpeningsReport.summary.valor_estimado_cs) }}</strong>
+          </div>
+          <div>
+            <span>Resultado</span>
+            <strong :class="resultAmountClass(pacaOpeningsReport.summary.diferencia_cs)">
+              C$ {{ formatMoney(pacaOpeningsReport.summary.diferencia_cs) }}
+            </strong>
+          </div>
+        </div>
+
+        <DataTable :value="pacaOpeningsReport.rows" :loading="loading" class="enterprise-table reports-table" stripedRows paginator :rows="10" responsive-layout="scroll">
+          <Column field="fecha" header="Fecha" sortable />
+          <Column field="documento" header="Documento" sortable />
+          <Column field="paca" header="Paca origen">
+            <template #body="{ data }">
+              <div class="products-main-cell">
+                <strong>{{ data.paca || "-" }}</strong>
+                <small>{{ data.cod_paca }}</small>
+              </div>
+            </template>
+          </Column>
+          <Column field="bodega_origen" header="Origen" />
+          <Column field="bodega_destino" header="Destino" />
+          <Column field="cantidad_pacas" header="Pacas">
+            <template #body="{ data }">{{ formatQty(data.cantidad_pacas) }}</template>
+          </Column>
+          <Column field="unidades_resultantes" header="Unidades resultantes">
+            <template #body="{ data }">{{ formatQty(data.unidades_resultantes) }}</template>
+          </Column>
+          <Column field="costo_origen_cs" header="Costo baja C$" sortable>
+            <template #body="{ data }">C$ {{ formatMoney(data.costo_origen_cs) }}</template>
+          </Column>
+          <Column field="valor_estimado_cs" header="Mercaderia resultante C$" sortable>
+            <template #body="{ data }">C$ {{ formatMoney(data.valor_estimado_cs) }}</template>
+          </Column>
+          <Column field="diferencia_cs" header="Ganancia / perdida" sortable>
+            <template #body="{ data }">
+              <Tag :severity="resultSeverity(data.diferencia_cs)" :value="`C$ ${formatMoney(data.diferencia_cs)}`" rounded />
+            </template>
+          </Column>
+          <Column field="resultado" header="Termino como">
+            <template #body="{ data }">
+              <Tag :severity="resultSeverity(data.diferencia_cs)" :value="data.resultado" rounded />
+            </template>
+          </Column>
+          <Column field="margen_percent" header="Margen">
+            <template #body="{ data }">{{ formatPercent(data.margen_percent) }}</template>
+          </Column>
+          <Column field="ingreso" header="Ingreso" />
+          <Column field="egreso" header="Egreso" />
+          <template #empty>
+            <div class="empty-state">No hay aperturas de pacas para los filtros seleccionados.</div>
+          </template>
+        </DataTable>
+      </div>
+
       <DataTable v-else :value="rows" :loading="loading" class="enterprise-table reports-table" stripedRows paginator :rows="12" responsive-layout="scroll">
         <Column v-for="column in activeColumns" :key="column.field" :field="column.field" :header="column.header" sortable>
           <template #body="{ data }">
@@ -274,6 +342,7 @@ import {
   fetchKardexReport,
   fetchLowStockReport,
   fetchNoStockReport,
+  fetchPacaOpeningsReport,
   fetchProfitReport,
   fetchReportCatalogs,
   fetchReportsSummary,
@@ -305,6 +374,19 @@ const salesDashboard = reactive({
   by_warehouse: [],
   quarterly: [],
 });
+const pacaOpeningsReport = reactive({
+  summary: {
+    aperturas: 0,
+    cantidad_pacas: 0,
+    unidades_resultantes: 0,
+    costo_origen_cs: 0,
+    valor_estimado_cs: 0,
+    diferencia_cs: 0,
+    resultado: "EQUILIBRIO",
+    margen_percent: 0,
+  },
+  rows: [],
+});
 
 const filters = reactive({
   start_date: firstDayOfMonth(),
@@ -329,6 +411,7 @@ const reportTabs = [
   { key: "profit", label: "Utilidad", section: "Ventas", icon: "bi-graph-up" },
   { key: "inventory-consolidated", label: "Inventario consolidado", section: "Inventario", icon: "bi-boxes" },
   { key: "inventory-existences", label: "Inventario de existencias", section: "Inventario", icon: "bi-grid-3x3-gap" },
+  { key: "paca-openings", label: "Aperturas de pacas", section: "Inventario", icon: "bi-box-arrow-in-down" },
   { key: "saldos-bodega", label: "Saldos por bodega", section: "Inventario", icon: "bi-building" },
   { key: "kardex", label: "Kardex", section: "Inventario", icon: "bi-list-columns-reverse" },
   { key: "cash-vouchers", label: "Vales de caja", section: "Caja", icon: "bi-cash-stack" },
@@ -378,6 +461,22 @@ const reportColumns = {
     { field: "existencia", header: "Existencia" },
     { field: "valor_costo_cs", header: "Costo total", type: "money" },
     { field: "valor_venta_cs", header: "Venta estimada", type: "money" },
+  ],
+  "paca-openings": [
+    { field: "fecha", header: "Fecha" },
+    { field: "documento", header: "Documento" },
+    { field: "paca", header: "Paca origen" },
+    { field: "bodega_origen", header: "Origen" },
+    { field: "bodega_destino", header: "Destino" },
+    { field: "cantidad_pacas", header: "Pacas" },
+    { field: "unidades_resultantes", header: "Unidades resultantes" },
+    { field: "costo_origen_cs", header: "Costo origen C$", type: "money" },
+    { field: "valor_estimado_cs", header: "Valor resultante C$", type: "money" },
+    { field: "diferencia_cs", header: "Diferencia C$", type: "money" },
+    { field: "resultado", header: "Resultado", type: "tag" },
+    { field: "margen_percent", header: "Margen %" },
+    { field: "egreso", header: "Egreso" },
+    { field: "ingreso", header: "Ingreso" },
   ],
   "saldos-bodega": [
     { field: "bodega", header: "Bodega" },
@@ -448,8 +547,9 @@ const activeTabMeta = computed(() => reportTabs.find((tab) => tab.key === active
 const activeColumns = computed(() => reportColumns[activeReport.value] || []);
 const isSalesDashboardReport = computed(() => activeReport.value === "sales-dashboard");
 const isInventoryExistencesReport = computed(() => activeReport.value === "inventory-existences");
+const isPacaOpeningsReport = computed(() => activeReport.value === "paca-openings");
 const showDateFilters = computed(() =>
-  ["sales-dashboard", "sales-detailed", "sales-products", "profit", "kardex", "cash-vouchers", "top-movement"].includes(activeReport.value),
+  ["sales-dashboard", "sales-detailed", "sales-products", "profit", "paca-openings", "kardex", "cash-vouchers", "top-movement"].includes(activeReport.value),
 );
 const filteredBodegas = computed(() => {
   if (!filters.sucursal_id) return bodegas.value;
@@ -522,6 +622,7 @@ async function loadActiveReport() {
         sucursal_id: filters.sucursal_id,
         bodega_id: filters.bodega_id,
       }),
+      "paca-openings": () => fetchPacaOpeningsReport(reportFilters),
       "saldos-bodega": () => fetchWarehouseBalancesReport({ bodega_id: filters.bodega_id }),
       kardex: () => fetchKardexReport({ ...reportFilters, product_id: filters.product_id }),
       "cash-vouchers": () => fetchCashVouchersReport(reportFilters),
@@ -538,19 +639,28 @@ async function loadActiveReport() {
       applySalesDashboard(data);
       rows.value = salesDashboard.daily_sales;
       applyInventoryMatrix();
+      applyPacaOpeningsReport();
     } else if (isInventoryExistencesReport.value) {
       applyInventoryMatrix(data);
       rows.value = inventoryMatrix.rows;
       applySalesDashboard();
+      applyPacaOpeningsReport();
+    } else if (isPacaOpeningsReport.value) {
+      applyPacaOpeningsReport(data);
+      rows.value = pacaOpeningsReport.rows;
+      applySalesDashboard();
+      applyInventoryMatrix();
     } else {
       rows.value = data;
       applyInventoryMatrix();
       applySalesDashboard();
+      applyPacaOpeningsReport();
     }
   } catch (error) {
     rows.value = [];
     applyInventoryMatrix();
     applySalesDashboard();
+    applyPacaOpeningsReport();
     toast.add({ severity: "error", summary: "No se pudo cargar informe", detail: error.message, life: 4200 });
   } finally {
     loading.value = false;
@@ -589,6 +699,20 @@ function applySalesDashboard(data = null) {
   salesDashboard.by_branch = data?.by_branch || [];
   salesDashboard.by_warehouse = data?.by_warehouse || [];
   salesDashboard.quarterly = data?.quarterly || [];
+}
+
+function applyPacaOpeningsReport(data = null) {
+  pacaOpeningsReport.summary = data?.summary || {
+    aperturas: 0,
+    cantidad_pacas: 0,
+    unidades_resultantes: 0,
+    costo_origen_cs: 0,
+    valor_estimado_cs: 0,
+    diferencia_cs: 0,
+    resultado: "EQUILIBRIO",
+    margen_percent: 0,
+  };
+  pacaOpeningsReport.rows = data?.rows || [];
 }
 
 function selectReport(key) {
@@ -642,10 +766,26 @@ function stockByBodega(item, bodegaId) {
   return Number(item?.balances?.[String(bodegaId)] || 0);
 }
 
+function resultSeverity(value) {
+  const amount = Number(value || 0);
+  if (amount > 0) return "success";
+  if (amount < 0) return "danger";
+  return "info";
+}
+
+function resultAmountClass(value) {
+  const amount = Number(value || 0);
+  if (amount > 0) return "positive-amount";
+  if (amount < 0) return "negative-amount";
+  return "";
+}
+
 function tagSeverity(value) {
   const text = String(value || "").toLowerCase();
   if (text.includes("ingreso") || text.includes("emitida") || text.includes("emitido")) return "success";
   if (text.includes("egreso") || text.includes("cerrado")) return "warn";
+  if (text.includes("ganancia")) return "success";
+  if (text.includes("perdida")) return "danger";
   if (text.includes("anulada")) return "danger";
   return "info";
 }
@@ -661,6 +801,10 @@ function exportCsv() {
   }
   if (isInventoryExistencesReport.value) {
     exportInventoryMatrixCsv();
+    return;
+  }
+  if (isPacaOpeningsReport.value) {
+    exportPacaOpeningsCsv();
     return;
   }
   const columns = activeColumns.value;
@@ -734,6 +878,66 @@ function exportInventoryMatrixCsv() {
   const link = document.createElement("a");
   link.href = url;
   link.download = `inventario_existencias_${filters.start_date}_${filters.end_date}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportPacaOpeningsCsv() {
+  const columns = [
+    "Fecha",
+    "Documento",
+    "Paca origen",
+    "Bodega origen",
+    "Bodega destino",
+    "Pacas",
+    "Unidades resultantes",
+    "Costo baja C$",
+    "Mercaderia resultante C$",
+    "Ganancia / perdida C$",
+    "Resultado",
+    "Margen %",
+    "Ingreso",
+    "Egreso",
+  ];
+  const body = pacaOpeningsReport.rows.map((row) =>
+    [
+      row.fecha,
+      row.documento,
+      `${row.cod_paca || ""} ${row.paca || ""}`.trim(),
+      row.bodega_origen,
+      row.bodega_destino,
+      row.cantidad_pacas,
+      row.unidades_resultantes,
+      row.costo_origen_cs,
+      row.valor_estimado_cs,
+      row.diferencia_cs,
+      row.resultado,
+      row.margen_percent,
+      row.ingreso,
+      row.egreso,
+    ].map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`).join(","),
+  );
+  const summary = [
+    "RESUMEN",
+    "",
+    "",
+    "",
+    "",
+    pacaOpeningsReport.summary.cantidad_pacas,
+    pacaOpeningsReport.summary.unidades_resultantes,
+    pacaOpeningsReport.summary.costo_origen_cs,
+    pacaOpeningsReport.summary.valor_estimado_cs,
+    pacaOpeningsReport.summary.diferencia_cs,
+    pacaOpeningsReport.summary.resultado,
+    pacaOpeningsReport.summary.margen_percent,
+    "",
+    "",
+  ].map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`).join(",");
+  const blob = new Blob([[columns.join(","), ...body, summary].join("\n")], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `apertura_pacas_${filters.start_date}_${filters.end_date}.csv`;
   link.click();
   URL.revokeObjectURL(url);
 }
@@ -954,6 +1158,46 @@ onMounted(async () => {
   gap: 0.55rem;
 }
 
+.paca-openings-report {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.paca-openings-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.paca-openings-summary > div {
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  border-radius: 8px;
+  background: #fff;
+  padding: 0.58rem 0.7rem;
+}
+
+.paca-openings-summary span {
+  display: block;
+  color: #64748b;
+  font-size: 0.66rem;
+  font-weight: 800;
+}
+
+.paca-openings-summary strong {
+  color: #0f172a;
+  display: block;
+  font-size: 0.98rem;
+  margin-top: 0.1rem;
+}
+
+.positive-amount {
+  color: #15803d !important;
+}
+
+.negative-amount {
+  color: #b91c1c !important;
+}
+
 .inventory-existence-summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1102,6 +1346,7 @@ td.inventory-product-name {
   .reports-kpi-grid,
   .sales-dashboard-kpis,
   .sales-dashboard-grid,
+  .paca-openings-summary,
   .inventory-existence-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1116,6 +1361,7 @@ td.inventory-product-name {
   .reports-kpi-grid,
   .sales-dashboard-kpis,
   .sales-dashboard-grid,
+  .paca-openings-summary,
   .inventory-existence-summary {
     grid-template-columns: 1fr;
   }

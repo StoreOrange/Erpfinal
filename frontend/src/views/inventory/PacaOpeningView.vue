@@ -167,7 +167,7 @@
                         <small>{{ option.cod_producto }}</small>
                       </div>
                       <div>
-                        <span>Saldo global {{ formatQty(productStock(option)) }}</span>
+                        <span>Seleccione para ver saldo en origen</span>
                         <span>Costo C$ {{ formatMoney(option.costo_producto) }}</span>
                       </div>
                     </div>
@@ -201,10 +201,6 @@
                   <strong :class="{ 'paca-negative': sourceAvailable(sourceDraft) <= 0 }">
                     {{ formatQty(sourceAvailable(sourceDraft)) }}
                   </strong>
-                </div>
-                <div>
-                  <span>Saldo global referencia</span>
-                  <strong>{{ formatQty(productGlobalStock(sourceDraft.producto_id)) }}</strong>
                 </div>
                 <div>
                   <span>Costo unitario</span>
@@ -249,7 +245,7 @@
                   />
                 </label>
                 <div class="paca-line-total">
-                  <span>Existencia</span>
+                  <span>Saldo origen</span>
                   <strong :class="{ 'paca-negative': Number(source.cantidad || 0) > sourceAvailable(source) }">
                     {{ formatQty(sourceAvailable(source)) }}
                   </strong>
@@ -383,13 +379,27 @@
               <h3>PAC-{{ selectedReport.id }}</h3>
               <p>{{ selectedReport.paca_producto?.cod_producto }} / {{ selectedReport.paca_producto?.descripcion }}</p>
             </div>
-            <Button type="button" icon="bi bi-printer" label="Imprimir / PDF" @click="printReport" />
+            <Button type="button" icon="bi bi-printer" label="Imprimir / Guardar PDF" @click="printReport" />
           </div>
+
+          <section class="paca-report-result" :class="resultClass(selectedReport.diferencia_cs)">
+            <div>
+              <span>Resultado financiero de la apertura</span>
+              <strong>{{ reportResultLabel(selectedReport) }}</strong>
+              <small>
+                Diferencia entre el costo de la mercaderia abierta y el valor de la mercaderia resultante.
+              </small>
+            </div>
+            <strong>C$ {{ formatMoney(selectedReport.diferencia_cs) }}</strong>
+          </section>
 
           <div class="paca-report-kpis">
             <div><span>Costo origen</span><strong>C$ {{ formatMoney(selectedReport.costo_origen_cs) }}</strong></div>
             <div><span>Valor producido</span><strong>C$ {{ formatMoney(selectedReport.valor_estimado_cs) }}</strong></div>
             <div><span>Resultado</span><strong :class="resultClass(selectedReport.diferencia_cs)">C$ {{ formatMoney(selectedReport.diferencia_cs) }}</strong></div>
+            <div><span>Variacion</span><strong :class="resultClass(selectedReport.diferencia_cs)">{{ formatPercent(reportDifferencePercent(selectedReport)) }}</strong></div>
+            <div><span>Costo por paca</span><strong>C$ {{ formatMoney(reportCostPerSourceUnit(selectedReport)) }}</strong></div>
+            <div><span>Valor por unidad resultante</span><strong>C$ {{ formatMoney(reportProducedValuePerUnit(selectedReport)) }}</strong></div>
           </div>
 
           <div class="paca-report-meta">
@@ -399,8 +409,20 @@
             <div><span>Pacas</span><strong>{{ formatQty(selectedReport.cantidad_pacas) }}</strong></div>
             <div><span>Egreso</span><strong>EGR-{{ selectedReport.egreso_id }}</strong></div>
             <div><span>Ingreso</span><strong>ING-{{ selectedReport.ingreso_id }}</strong></div>
+            <div><span>Usuario</span><strong>{{ selectedReport.usuario_registro || "-" }}</strong></div>
+            <div><span>Tasa cambio</span><strong>C$ {{ formatMoney(selectedReport.tasa_cambio) }}</strong></div>
+            <div><span>Estado</span><strong>{{ selectedReport.estado || "-" }}</strong></div>
           </div>
 
+          <div v-if="selectedReport.observacion" class="paca-report-note">
+            <span>Observacion</span>
+            <p>{{ selectedReport.observacion }}</p>
+          </div>
+
+          <div class="paca-report-section-title">
+            <strong>Mercaderia abierta</strong>
+            <span>Costo descargado del inventario origen</span>
+          </div>
           <DataTable :value="selectedReport.origenes || []" class="movements-table" responsive-layout="scroll" size="small">
             <Column field="producto.descripcion" header="Pacas origen">
               <template #body="{ data }">
@@ -413,11 +435,18 @@
             <Column field="cantidad" header="Cantidad">
               <template #body="{ data }">{{ formatQty(data.cantidad) }}</template>
             </Column>
+            <Column field="costo_unitario_cs" header="Costo unit. C$">
+              <template #body="{ data }">C$ {{ formatMoney(data.costo_unitario_cs) }}</template>
+            </Column>
             <Column field="subtotal_cs" header="Costo baja C$">
               <template #body="{ data }">C$ {{ formatMoney(data.subtotal_cs) }}</template>
             </Column>
           </DataTable>
 
+          <div class="paca-report-section-title">
+            <strong>Mercaderia resultante</strong>
+            <span>Valor generado y costo asignado proporcionalmente</span>
+          </div>
           <DataTable :value="selectedReport.lineas || []" class="movements-table" responsive-layout="scroll" size="small">
             <Column field="producto.descripcion" header="Producto">
               <template #body="{ data }">
@@ -430,11 +459,19 @@
             <Column field="cantidad" header="Cantidad">
               <template #body="{ data }">{{ formatQty(data.cantidad) }}</template>
             </Column>
+            <Column field="precio_estimado_unitario_cs" header="Valor unit. C$">
+              <template #body="{ data }">C$ {{ formatMoney(data.precio_estimado_unitario_cs) }}</template>
+            </Column>
             <Column field="valor_estimado_cs" header="Valor producido C$">
               <template #body="{ data }">C$ {{ formatMoney(data.valor_estimado_cs) }}</template>
             </Column>
             <Column field="costo_asignado_cs" header="Costo asignado">
               <template #body="{ data }">C$ {{ formatMoney(data.costo_asignado_cs) }}</template>
+            </Column>
+            <Column header="Diferencia">
+              <template #body="{ data }">
+                <strong :class="resultClass(lineDifferenceCs(data))">C$ {{ formatMoney(lineDifferenceCs(data)) }}</strong>
+              </template>
             </Column>
           </DataTable>
         </article>
@@ -545,8 +582,41 @@ function formatQty(value) {
   return Number(value || 0).toFixed(2);
 }
 
+function formatPercent(value) {
+  return `${new Intl.NumberFormat("es-NI", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value || 0))}%`;
+}
+
 function resultClass(value) {
   return Number(value || 0) >= 0 ? "paca-positive" : "paca-negative";
+}
+
+function reportResultLabel(report) {
+  const difference = Number(report?.diferencia_cs || 0);
+  if (difference > 0) return "Ganancia de inventario";
+  if (difference < 0) return "Perdida de inventario";
+  return "Sin diferencia";
+}
+
+function reportDifferencePercent(report) {
+  const sourceCost = Number(report?.costo_origen_cs || 0);
+  if (!sourceCost) return 0;
+  return (Number(report?.diferencia_cs || 0) / sourceCost) * 100;
+}
+
+function reportCostPerSourceUnit(report) {
+  const sourceUnits = Number(report?.cantidad_pacas || 0);
+  if (!sourceUnits) return 0;
+  return Number(report?.costo_origen_cs || 0) / sourceUnits;
+}
+
+function reportProducedValuePerUnit(report) {
+  const producedUnits = (report?.lineas || []).reduce((sum, line) => sum + Number(line.cantidad || 0), 0);
+  if (!producedUnits) return 0;
+  return Number(report?.valor_estimado_cs || 0) / producedUnits;
+}
+
+function lineDifferenceCs(line) {
+  return Number(line?.valor_estimado_cs || 0) - Number(line?.costo_asignado_cs || 0);
 }
 
 function lineTotal(line) {
@@ -567,14 +637,6 @@ function productLabel(productId) {
 
 function productCode(productId) {
   return productById(productId)?.cod_producto || "";
-}
-
-function productStock(product) {
-  return Number(product?.saldo?.existencia ?? product?.existencia ?? product?.free_qty ?? 0);
-}
-
-function productGlobalStock(productId) {
-  return productStock(productById(productId));
 }
 
 function sourceAvailable(source) {
@@ -884,6 +946,7 @@ async function submitOpening() {
     selectedReport.value = await fetchPacaOpeningReport(report.id);
     activeTab.value = "history";
     resetForm();
+    window.setTimeout(printReport, 350);
   } catch (error) {
     formError.value = error.message || "No se pudo procesar la apertura de paca.";
   } finally {
