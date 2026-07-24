@@ -25,6 +25,7 @@ from ..models.inventory import (
     SaldoProducto,
 )
 from ..models.sales import CashVoucher, SalesInvoice, SalesInvoiceItem
+from ..models.user import Branch
 from ..routers.inventory import _balances_by_bodega
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
@@ -59,10 +60,33 @@ def _base_invoice_query(db: Session, start: date, end: date, bodega_id: int | No
     return query
 
 
-def _base_voucher_query(db: Session, start: date, end: date, bodega_id: int | None = None):
+def _base_sales_query(
+    db: Session,
+    start: date,
+    end: date,
+    bodega_id: int | None = None,
+    sucursal_id: int | None = None,
+):
+    query = db.query(SalesInvoice).filter(SalesInvoice.fecha.between(start, end))
+    if bodega_id:
+        query = query.filter(SalesInvoice.bodega_id == bodega_id)
+    if sucursal_id:
+        query = query.join(Bodega, Bodega.id == SalesInvoice.bodega_id).filter(Bodega.sucursal_id == sucursal_id)
+    return query
+
+
+def _base_voucher_query(
+    db: Session,
+    start: date,
+    end: date,
+    bodega_id: int | None = None,
+    sucursal_id: int | None = None,
+):
     query = db.query(CashVoucher).filter(CashVoucher.fecha.between(start, end))
     if bodega_id:
         query = query.filter(CashVoucher.bodega_id == bodega_id)
+    if sucursal_id:
+        query = query.join(Bodega, Bodega.id == CashVoucher.bodega_id).filter(Bodega.sucursal_id == sucursal_id)
     return query
 
 
@@ -75,9 +99,16 @@ def report_catalogs(db: Session = Depends(get_db)):
         .limit(500)
         .all()
     )
-    bodegas = db.query(Bodega.id, Bodega.code, Bodega.name).filter(Bodega.activo.is_(True)).order_by(Bodega.name).all()
+    bodegas = (
+        db.query(Bodega.id, Bodega.code, Bodega.name, Bodega.sucursal_id)
+        .filter(Bodega.activo.is_(True))
+        .order_by(Bodega.name)
+        .all()
+    )
+    sucursales = db.query(Branch.id, Branch.code, Branch.name).filter(Branch.activo.is_(True)).order_by(Branch.name).all()
     return {
-        "bodegas": [{"id": row.id, "code": row.code, "name": row.name} for row in bodegas],
+        "sucursales": [{"id": row.id, "code": row.code, "name": row.name} for row in sucursales],
+        "bodegas": [{"id": row.id, "code": row.code, "name": row.name, "sucursal_id": row.sucursal_id} for row in bodegas],
         "products": [
             {"id": row.id, "cod_producto": row.cod_producto, "descripcion": row.descripcion}
             for row in products
@@ -89,12 +120,13 @@ def report_catalogs(db: Session = Depends(get_db)):
 def reports_summary(
     start_date: date | None = Query(None),
     end_date: date | None = Query(None),
+    sucursal_id: int | None = Query(None),
     bodega_id: int | None = Query(None),
     db: Session = Depends(get_db),
 ):
     start, end = _date_range(start_date, end_date)
-    invoice_query = _base_invoice_query(db, start, end, bodega_id)
-    voucher_query = _base_voucher_query(db, start, end, bodega_id)
+    invoice_query = _base_sales_query(db, start, end, bodega_id, sucursal_id)
+    voucher_query = _base_voucher_query(db, start, end, bodega_id, sucursal_id)
 
     sales_totals = _money_summary(invoice_query, SalesInvoice.total_usd, SalesInvoice.total_cs)
     invoice_count = invoice_query.count()
@@ -136,15 +168,176 @@ def reports_summary(
     }
 
 
-@router.get("/sales-detailed")
-def sales_detailed_report(
+@router.get("/sales-dashboard")
+def sales_dashboard_report(
     start_date: date | None = Query(None),
     end_date: date | None = Query(None),
+    sucursal_id: int | None = Query(None),
     bodega_id: int | None = Query(None),
     db: Session = Depends(get_db),
 ):
     start, end = _date_range(start_date, end_date)
-    invoices = _base_invoice_query(db, start, end, bodega_id).order_by(SalesInvoice.fecha.desc(), SalesInvoice.id.desc()).all()
+    month_start = end.replace(day=1)
+    year_start = end.replace(month=1, day=1)
+    year_end = end.replace(month=12, day=31)
+
+    period_query = _base_sales_query(db, start, end, bodega_id, sucursal_id)
+    month_query = _base_sales_query(db, month_start, end, bodega_id, sucursal_id)
+
+    period_totals = _money_summary(period_query, SalesInvoice.total_usd, SalesInvoice.total_cs)
+    month_totals = _money_summary(month_query, SalesInvoice.total_usd, SalesInvoice.total_cs)
+    period_invoice_count = period_query.count()
+    month_invoice_count = month_query.count()
+
+    daily_query = (
+        db.query(
+            SalesInvoice.fecha.label("fecha"),
+            func.count(SalesInvoice.id).label("invoice_count"),
+            func.coalesce(func.sum(SalesInvoice.total_cs), 0).label("total_cs"),
+            func.coalesce(func.sum(SalesInvoice.total_usd), 0).label("total_usd"),
+        )
+        .filter(SalesInvoice.fecha.between(month_start, end))
+    )
+    if bodega_id:
+        daily_query = daily_query.filter(SalesInvoice.bodega_id == bodega_id)
+    if sucursal_id:
+        daily_query = daily_query.join(Bodega, Bodega.id == SalesInvoice.bodega_id).filter(Bodega.sucursal_id == sucursal_id)
+
+    daily_map = {
+        row.fecha: {
+            "fecha": row.fecha.isoformat(),
+            "invoice_count": int(row.invoice_count or 0),
+            "total_cs": _to_float(row.total_cs),
+            "total_usd": _to_float(row.total_usd),
+        }
+        for row in daily_query.group_by(SalesInvoice.fecha).order_by(SalesInvoice.fecha).all()
+    }
+    daily_sales = []
+    cursor = month_start
+    accumulated_cs = Decimal("0")
+    while cursor <= end:
+        row = daily_map.get(cursor, {"fecha": cursor.isoformat(), "invoice_count": 0, "total_cs": 0, "total_usd": 0})
+        accumulated_cs += Decimal(str(row["total_cs"] or 0))
+        daily_sales.append({**row, "accumulated_cs": _to_float(accumulated_cs)})
+        cursor += timedelta(days=1)
+
+    branch_query = (
+        db.query(
+            Branch.id.label("sucursal_id"),
+            Branch.name.label("sucursal"),
+            func.count(SalesInvoice.id).label("invoice_count"),
+            func.coalesce(func.sum(SalesInvoice.total_cs), 0).label("total_cs"),
+            func.coalesce(func.sum(SalesInvoice.total_usd), 0).label("total_usd"),
+        )
+        .join(Bodega, Bodega.sucursal_id == Branch.id)
+        .join(SalesInvoice, SalesInvoice.bodega_id == Bodega.id)
+        .filter(SalesInvoice.fecha.between(start, end))
+    )
+    if sucursal_id:
+        branch_query = branch_query.filter(Branch.id == sucursal_id)
+    if bodega_id:
+        branch_query = branch_query.filter(Bodega.id == bodega_id)
+    branch_rows = branch_query.group_by(Branch.id, Branch.name).order_by(func.sum(SalesInvoice.total_cs).desc()).all()
+
+    warehouse_query = (
+        db.query(
+            Bodega.id.label("bodega_id"),
+            Bodega.name.label("bodega"),
+            Branch.name.label("sucursal"),
+            func.count(SalesInvoice.id).label("invoice_count"),
+            func.coalesce(func.sum(SalesInvoice.total_cs), 0).label("total_cs"),
+            func.coalesce(func.sum(SalesInvoice.total_usd), 0).label("total_usd"),
+        )
+        .join(SalesInvoice, SalesInvoice.bodega_id == Bodega.id)
+        .outerjoin(Branch, Branch.id == Bodega.sucursal_id)
+        .filter(SalesInvoice.fecha.between(start, end))
+    )
+    if sucursal_id:
+        warehouse_query = warehouse_query.filter(Bodega.sucursal_id == sucursal_id)
+    if bodega_id:
+        warehouse_query = warehouse_query.filter(Bodega.id == bodega_id)
+    warehouse_rows = warehouse_query.group_by(Bodega.id, Bodega.name, Branch.name).order_by(func.sum(SalesInvoice.total_cs).desc()).all()
+
+    quarter_expr = func.extract("quarter", SalesInvoice.fecha)
+    quarterly_query = _base_sales_query(db, year_start, year_end, bodega_id, sucursal_id).with_entities(
+        quarter_expr.label("quarter"),
+        func.count(SalesInvoice.id).label("invoice_count"),
+        func.coalesce(func.sum(SalesInvoice.total_cs), 0).label("total_cs"),
+        func.coalesce(func.sum(SalesInvoice.total_usd), 0).label("total_usd"),
+    )
+    quarterly_map = {
+        int(row.quarter): {
+            "quarter": f"T{int(row.quarter)}",
+            "invoice_count": int(row.invoice_count or 0),
+            "total_cs": _to_float(row.total_cs),
+            "total_usd": _to_float(row.total_usd),
+        }
+        for row in quarterly_query.group_by(quarter_expr).order_by(quarter_expr).all()
+    }
+    quarterly = []
+    previous_total = 0.0
+    for quarter in range(1, 5):
+        row = quarterly_map.get(quarter, {"quarter": f"T{quarter}", "invoice_count": 0, "total_cs": 0, "total_usd": 0})
+        total_cs = float(row["total_cs"] or 0)
+        variation = ((total_cs - previous_total) / previous_total * 100) if previous_total else 0
+        quarterly.append({**row, "variation_percent": variation})
+        previous_total = total_cs
+
+    top_day = max(daily_sales, key=lambda item: item["total_cs"], default=None)
+    return {
+        "period": {
+            "start_date": start.isoformat(),
+            "end_date": end.isoformat(),
+            "invoice_count": period_invoice_count,
+            "total_cs": period_totals["cs"],
+            "total_usd": period_totals["usd"],
+            "average_ticket_cs": period_totals["cs"] / period_invoice_count if period_invoice_count else 0,
+        },
+        "month": {
+            "start_date": month_start.isoformat(),
+            "end_date": end.isoformat(),
+            "invoice_count": month_invoice_count,
+            "total_cs": month_totals["cs"],
+            "total_usd": month_totals["usd"],
+            "average_ticket_cs": month_totals["cs"] / month_invoice_count if month_invoice_count else 0,
+            "top_day": top_day,
+        },
+        "daily_sales": daily_sales,
+        "by_branch": [
+            {
+                "sucursal_id": row.sucursal_id,
+                "sucursal": row.sucursal,
+                "invoice_count": int(row.invoice_count or 0),
+                "total_cs": _to_float(row.total_cs),
+                "total_usd": _to_float(row.total_usd),
+            }
+            for row in branch_rows
+        ],
+        "by_warehouse": [
+            {
+                "bodega_id": row.bodega_id,
+                "bodega": row.bodega,
+                "sucursal": row.sucursal or "",
+                "invoice_count": int(row.invoice_count or 0),
+                "total_cs": _to_float(row.total_cs),
+                "total_usd": _to_float(row.total_usd),
+            }
+            for row in warehouse_rows
+        ],
+        "quarterly": quarterly,
+    }
+
+
+@router.get("/sales-detailed")
+def sales_detailed_report(
+    start_date: date | None = Query(None),
+    end_date: date | None = Query(None),
+    sucursal_id: int | None = Query(None),
+    bodega_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    start, end = _date_range(start_date, end_date)
+    invoices = _base_sales_query(db, start, end, bodega_id, sucursal_id).order_by(SalesInvoice.fecha.desc(), SalesInvoice.id.desc()).all()
     return [
         {
             "id": invoice.id,
@@ -168,6 +361,7 @@ def sales_detailed_report(
 def sales_products_report(
     start_date: date | None = Query(None),
     end_date: date | None = Query(None),
+    sucursal_id: int | None = Query(None),
     bodega_id: int | None = Query(None),
     db: Session = Depends(get_db),
 ):
@@ -186,6 +380,8 @@ def sales_products_report(
     )
     if bodega_id:
         query = query.filter(SalesInvoice.bodega_id == bodega_id)
+    if sucursal_id:
+        query = query.join(Bodega, Bodega.id == SalesInvoice.bodega_id).filter(Bodega.sucursal_id == sucursal_id)
     rows = query.group_by(SalesInvoiceItem.producto_id, SalesInvoiceItem.cod_producto, SalesInvoiceItem.descripcion).order_by(func.sum(SalesInvoiceItem.subtotal_cs).desc()).all()
     return [
         {
@@ -204,6 +400,7 @@ def sales_products_report(
 def profit_report(
     start_date: date | None = Query(None),
     end_date: date | None = Query(None),
+    sucursal_id: int | None = Query(None),
     bodega_id: int | None = Query(None),
     db: Session = Depends(get_db),
 ):
@@ -222,6 +419,8 @@ def profit_report(
     )
     if bodega_id:
         query = query.filter(SalesInvoice.bodega_id == bodega_id)
+    if sucursal_id:
+        query = query.join(Bodega, Bodega.id == SalesInvoice.bodega_id).filter(Bodega.sucursal_id == sucursal_id)
     rows = query.group_by(SalesInvoiceItem.cod_producto, SalesInvoiceItem.descripcion).order_by(func.sum(SalesInvoiceItem.subtotal_cs).desc()).all()
     return [
         {
@@ -290,11 +489,92 @@ def warehouse_balances_report(bodega_id: int | None = Query(None), db: Session =
     return rows
 
 
+@router.get("/inventory-existences")
+def inventory_existences_report(
+    sucursal_id: int | None = Query(None),
+    bodega_id: int | None = Query(None),
+    include_zero: bool = Query(False),
+    db: Session = Depends(get_db),
+):
+    bodegas_query = (
+        db.query(Bodega)
+        .filter(Bodega.activo.is_(True), Bodega.manages_inventory.is_(True))
+        .order_by(Bodega.name)
+    )
+    if sucursal_id:
+        bodegas_query = bodegas_query.filter(Bodega.sucursal_id == sucursal_id)
+    if bodega_id:
+        bodegas_query = bodegas_query.filter(Bodega.id == bodega_id)
+    bodegas = bodegas_query.all()
+
+    products = (
+        db.query(Producto)
+        .filter(Producto.activo.is_(True))
+        .order_by(Producto.descripcion)
+        .all()
+    )
+    balances = _balances_by_bodega(db, [bodega.id for bodega in bodegas], [product.id for product in products])
+    totals_by_bodega = {str(bodega.id): Decimal("0") for bodega in bodegas}
+    rows = []
+    total_general = Decimal("0")
+    valor_costo_total = Decimal("0")
+
+    for product in products:
+        product_balances: dict[str, float] = {}
+        total_product = Decimal("0")
+        for bodega in bodegas:
+            existencia = balances.get((product.id, bodega.id), Decimal("0"))
+            product_balances[str(bodega.id)] = _to_float(existencia)
+            totals_by_bodega[str(bodega.id)] += existencia
+            total_product += existencia
+
+        if not include_zero and total_product == 0:
+            continue
+
+        product_cost = Decimal(str(product.costo_producto or 0))
+        valor_costo = total_product * product_cost
+        total_general += total_product
+        valor_costo_total += valor_costo
+        rows.append(
+            {
+                "id": product.id,
+                "cod_producto": product.cod_producto,
+                "descripcion": product.descripcion,
+                "linea": product.linea.linea if product.linea else "",
+                "segmento": product.segmento.segmento if product.segmento else "",
+                "balances": product_balances,
+                "total_existencia": _to_float(total_product),
+                "costo_producto": _to_float(product_cost),
+                "valor_costo_cs": _to_float(valor_costo),
+            }
+        )
+
+    return {
+        "bodegas": [
+            {
+                "id": bodega.id,
+                "code": bodega.code,
+                "name": bodega.name,
+                "sucursal_id": bodega.sucursal_id,
+                "sucursal": bodega.sucursal.name if bodega.sucursal else "",
+            }
+            for bodega in bodegas
+        ],
+        "rows": rows,
+        "totals": {
+            "by_bodega": {key: _to_float(value) for key, value in totals_by_bodega.items()},
+            "grand_total": _to_float(total_general),
+            "valor_costo_cs": _to_float(valor_costo_total),
+        },
+    }
+
+
 @router.get("/kardex")
 def kardex_report(
     product_id: int | None = Query(None),
     start_date: date | None = Query(None),
     end_date: date | None = Query(None),
+    sucursal_id: int | None = Query(None),
     bodega_id: int | None = Query(None),
     db: Session = Depends(get_db),
 ):
@@ -319,6 +599,9 @@ def kardex_report(
     if bodega_id:
         ingreso_query = ingreso_query.filter(IngresoInventario.bodega_id == bodega_id)
         egreso_query = egreso_query.filter(EgresoInventario.bodega_id == bodega_id)
+    if sucursal_id:
+        ingreso_query = ingreso_query.join(Bodega, Bodega.id == IngresoInventario.bodega_id).filter(Bodega.sucursal_id == sucursal_id)
+        egreso_query = egreso_query.join(Bodega, Bodega.id == EgresoInventario.bodega_id).filter(Bodega.sucursal_id == sucursal_id)
 
     for ingreso, item, product in ingreso_query.all():
         entries.append(
@@ -357,11 +640,12 @@ def kardex_report(
 def cash_vouchers_report(
     start_date: date | None = Query(None),
     end_date: date | None = Query(None),
+    sucursal_id: int | None = Query(None),
     bodega_id: int | None = Query(None),
     db: Session = Depends(get_db),
 ):
     start, end = _date_range(start_date, end_date)
-    vouchers = _base_voucher_query(db, start, end, bodega_id).order_by(CashVoucher.fecha.desc(), CashVoucher.id.desc()).all()
+    vouchers = _base_voucher_query(db, start, end, bodega_id, sucursal_id).order_by(CashVoucher.fecha.desc(), CashVoucher.id.desc()).all()
     return [
         {
             "id": voucher.id,
@@ -436,6 +720,7 @@ def stagnant_products_report(
 def top_movement_report(
     start_date: date | None = Query(None),
     end_date: date | None = Query(None),
+    sucursal_id: int | None = Query(None),
     bodega_id: int | None = Query(None),
     limit: int = Query(50, ge=1, le=300),
     db: Session = Depends(get_db),
@@ -456,6 +741,9 @@ def top_movement_report(
     if bodega_id:
         ingreso_query = ingreso_query.filter(IngresoInventario.bodega_id == bodega_id)
         egreso_query = egreso_query.filter(EgresoInventario.bodega_id == bodega_id)
+    if sucursal_id:
+        ingreso_query = ingreso_query.join(Bodega, Bodega.id == IngresoInventario.bodega_id).filter(Bodega.sucursal_id == sucursal_id)
+        egreso_query = egreso_query.join(Bodega, Bodega.id == EgresoInventario.bodega_id).filter(Bodega.sucursal_id == sucursal_id)
 
     ingreso_map = {int(product_id): Decimal(str(qty or 0)) for product_id, qty in ingreso_query.all()}
     egreso_map = {int(product_id): Decimal(str(qty or 0)) for product_id, qty in egreso_query.all()}
